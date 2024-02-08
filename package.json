@@ -1,11 +1,12 @@
 {
 	"name": "bss-soundweb",
-	"version": "0.1.0",
+	"version": "0.0.0",
 	"main": "./dist/main.js",
 	"scripts": {
 		"dev": "yarn build:main --watch",
 		"build": "rimraf dist && yarn build:main",
-		"build:main": "tsc -p tsconfig.json"
+		"build:main": "tsc -p tsconfig.json",
+		"postversion": "yarn companion-module-build"
 	},
 	"license": "MIT",
 	"repository": {
