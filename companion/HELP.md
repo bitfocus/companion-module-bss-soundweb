@@ -5,7 +5,7 @@ This module allows Companion to control BSS Soundweb London devices using the Di
 - Soundweb BLU-806DA
 - Soundweb BLU-160
 
-In theory, it should work on all other Soundweb devices, providing they support the [London Direct Inject Protocol](https://help.harmanpro.com/soundweb-london-third-party-control).
+In theory, it should work on any Soundweb London device, providing it supports the [London Direct Inject Protocol](https://help.harmanpro.com/soundweb-london-third-party-control).
 
 This module is only compatible with Companion v3 and will be maintained from Companion `v3.2.0` onwards.
 
@@ -23,9 +23,11 @@ The only setting you need to provide is the <b>Gateway Node IP address</b>. This
 
 ![Edit Soundweb connection](images/screenshot_companion_edit_connection.png)
 
-Once you've set the IP address, hit save and if everything is correct, you should see a green tick under the connection status:
+Once you've set the IP address, hit save and once Companion has successfully connected, you should see a green tick under connection status:
 
 ![Companion Soundweb healthy connection](images/screenshot_companion_healthy_connection.png)
+
+If you don't see the green tick, double check the IP address for typos and then make sure your network settings on the Soundweb device and your Companion server are also correct.  The control protocol uses a TCP connection on port `1023`, so depending on your network complexity, you may need to check your network configuration permits this connection to take place.
 
 > <i>Note: You only need to setup one Soundweb connection per deployment/design, but you may choose to setup Companion with multiple Soundweb connections for availability reasons (because you don't want a single point of failure) or because you want Companion to communicate with devices from different designs. There should be no problem with doing this providing each connection uses a different gateway node.</i>
 
@@ -39,7 +41,7 @@ The trickiest part when configuring a basic action or feedback is finding and en
 
 #### Audio Architect
 
-There are a few ways to find HiQnet addresses within Audio Architect:
+There are a few ways to find a HiQnet address within Audio Architect:
 
 - <b>Venue Explorer:</b> When in offline/edit mode, you can browse the venue tree right down to the parameter IDs of all the objects in a design.
 - <b>Object Properties pane:</b> You can find the address of a selected object in the properties pane (at the bottom) under the field 'HiQnet Address'.
