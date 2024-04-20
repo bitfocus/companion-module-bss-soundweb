@@ -235,7 +235,8 @@ export class ParameterAddress {
  */
 export function dbToRaw(dbValue: number | '-inf'): number {
 	if (dbValue == '-inf') {
-		dbValue = MINIMUM_GAIN_RAW_VALUE
+		// dbValue = MINIMUM_GAIN_RAW_VALUE
+		dbValue = -80
 	}
 	dbValue = Math.round(dbValue * 100) / 100
 	let value

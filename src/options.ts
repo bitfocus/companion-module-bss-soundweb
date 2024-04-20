@@ -6,9 +6,8 @@ import {
 	CompanionInputFieldTextInput,
 	CompanionOptionValues,
 	InputValue,
-	Regex,
 } from '@companion-module/base'
-import { ZodError, z } from 'zod'
+import { EnumLike, ZodError, z } from 'zod'
 import { ParameterUnit } from './parameters'
 import { ParameterAddress, ParameterAddressParsingError } from './sweb'
 import { FQ_OBJ_ADDR_REGEXP, FQ_PARAM_ADDR_REGEXP, VARIABLE_REGEXP, getRegexRange } from './utils'
@@ -27,69 +26,56 @@ export enum ComparisonOptionValues {
 	LESS_THAN_EQUAL,
 }
 
-export const nodeOption: CompanionInputFieldTextInput = {
-	id: 'node',
-	type: 'textinput',
-	label: 'Node address',
-	default: '0',
-	regex: Regex.NUMBER,
-	useVariables: true,
-}
-
-export const vdOption: CompanionInputFieldTextInput = {
-	id: 'vd',
-	type: 'textinput',
-	label: 'Virtual device',
-	default: '3',
-	// regex: Regex.NUMBER,
-	useVariables: true,
-}
-
-export const objOption: CompanionInputFieldTextInput = {
-	id: 'object',
-	type: 'textinput',
-	label: 'Object address',
-	default: '0.0.0',
-	useVariables: true,
-}
-
-export const paramOption: CompanionInputFieldTextInput = {
-	id: 'parameter',
-	type: 'textinput',
-	label: 'Parameter ID',
-	default: '0',
-	// regex: Regex.NUMBER,
-	useVariables: true,
-}
-
 // [node].[vd].[obj1].[obj2].[obj3].[param]
 // [node].[vd].[obj].[param]
 // [fqObj].[param]
-export const fullyQualifiedParameterAddressOption: CompanionInputFieldTextInput = {
-	id: 'fqParamAddress',
-	type: 'textinput',
-	label: 'Fully qualified parameter address',
-	default: '0.3.0.0.0.0',
-	regex: `/${FQ_PARAM_ADDR_REGEXP}/`,
-	useVariables: true,
+export type FQParameterAddressOptionField = CompanionInputFieldTextInput & {
+	id: 'fqParamAddress'
 }
 
-export const fullyQualifiedObjectAddressOption: CompanionInputFieldTextInput = {
-	id: 'fqObjectAddress',
-	type: 'textinput',
-	label: 'Fully qualified object address',
-	default: '0.3.0.0.0',
-	regex: `/${FQ_OBJ_ADDR_REGEXP}/`,
-	useVariables: true,
+export function fQParameterAddressOptionField(): FQParameterAddressOptionField {
+	return {
+		id: 'fqParamAddress',
+		type: 'textinput',
+		label: 'Fully qualified parameter address',
+		tooltip:
+			"Provide the fully qualified (complete) address of the 'parameter' within your design that you wish to interact with.  This must be in one of the documented/compatible formats.  See this module's 'help' page for more information.",
+		default: '0.3.0.0.0.0',
+		regex: `/${FQ_PARAM_ADDR_REGEXP}/`,
+		useVariables: true,
+	}
 }
 
-export function buttonOption(props?: {
+export type FQObjectAddressOptionField = CompanionInputFieldTextInput & {
+	id: 'fqObjectAddress'
+}
+
+export function fQObjectAddressOptionField(): FQObjectAddressOptionField {
+	return {
+		id: 'fqObjectAddress',
+		type: 'textinput',
+		label: 'Fully qualified object address',
+		tooltip:
+			"Provide the fully qualified (complete) address of the 'object' within your design that you wish to interact with.  This must be in one of the documented/compatible formats.  See this module's 'help' page for more information.",
+		default: '0.3.0.0.0',
+		regex: `/${FQ_OBJ_ADDR_REGEXP}/`,
+		useVariables: true,
+	}
+}
+
+export type ButtonValueSelectionOptionField = CompanionInputFieldDropdown & {
+	id: 'buttonValue'
+}
+
+export type ButtonValueChoice = { id: number; label: string }
+
+export function buttonValueSelectionOptionField(props?: {
 	label?: string
 	default?: number
-	choices?: { id: number; label: string }[]
+	choices?: ButtonValueChoice[]
 	isVisible?: (options: CompanionOptionValues, data: any | undefined) => boolean
 	isVisibleData?: any
-}): CompanionInputFieldDropdown {
+}): ButtonValueSelectionOptionField {
 	return {
 		id: 'buttonValue',
 		type: 'dropdown',
@@ -105,10 +91,11 @@ export function buttonOption(props?: {
 	}
 }
 
-export function unitOption(
-	defaultUnit = ParameterUnit.RAW,
-	include: ParameterUnit[] = []
-): CompanionInputFieldDropdown {
+export type UnitOptionField = CompanionInputFieldDropdown & {
+	id: 'unit'
+}
+
+export function unitOptionField(defaultUnit = ParameterUnit.RAW, include: ParameterUnit[] = []): UnitOptionField {
 	let unitLabelMap = new Map([
 		[ParameterUnit.RAW, 'Raw'],
 		[ParameterUnit.DB, 'dB'],
@@ -136,10 +123,14 @@ export function unitOption(
 	}
 }
 
-export function setTypeOption(
+export type SetTypeOptionField = CompanionInputFieldDropdown & {
+	id: 'setType'
+}
+
+export function setTypeOptionField(
 	defaultSetType = ParameterSetType.ABSOLUTE,
 	include: ParameterSetType[] = []
-): CompanionInputFieldDropdown {
+): SetTypeOptionField {
 	let setTypeLabelMap = new Map([
 		[ParameterSetType.ABSOLUTE, 'Absolute'],
 		[ParameterSetType.RELATIVE, 'Relative'],
@@ -167,7 +158,11 @@ export function setTypeOption(
 	}
 }
 
-export function createVariableOption(): CompanionInputFieldCheckbox {
+export type CreateVariableOptionField = CompanionInputFieldCheckbox & {
+	id: 'createVariable'
+}
+
+export function createVariableOptionField(): CreateVariableOptionField {
 	return {
 		id: 'createVariable',
 		type: 'checkbox',
@@ -176,10 +171,14 @@ export function createVariableOption(): CompanionInputFieldCheckbox {
 	}
 }
 
+export type ChannelInputField = CompanionInputFieldDropdown & {
+	id: 'channel'
+}
+
 export function channelSelectDropdown(
 	numCh = 1,
 	isVisible?: (options: CompanionOptionValues, data: any | undefined) => boolean
-): CompanionInputFieldDropdown {
+): ChannelInputField {
 	return {
 		id: 'channel',
 		type: 'dropdown',
@@ -195,9 +194,13 @@ export function channelSelectDropdown(
 	}
 }
 
-export function comparisonOperationOption(): CompanionInputFieldDropdown {
+export type ComparisonOperatorField = CompanionInputFieldDropdown & {
+	id: 'comparisonOperator'
+}
+
+export function comparisonOperatorOption(): ComparisonOperatorField {
 	return {
-		id: 'comparisonOperation',
+		id: 'comparisonOperator',
 		type: 'dropdown',
 		label: 'Comparison operator',
 		default: ComparisonOptionValues.EQUAL,
@@ -211,9 +214,13 @@ export function comparisonOperationOption(): CompanionInputFieldDropdown {
 	}
 }
 
-export type SuccessfulOptionsParsingResult = {
+export type ParsedOptionValues = {
+	[key: string]: any
+}
+
+export type SuccessfulOptionsParsingResult<OptionValues extends ParsedOptionValues> = {
 	success: true
-	options: { [id: string]: any }
+	options: OptionValues
 	containsVariable?: boolean
 }
 
@@ -221,7 +228,9 @@ export type FailedOptionsParsingResult = {
 	success: false
 	error: string
 }
-export type OptionsParsingResult = SuccessfulOptionsParsingResult | FailedOptionsParsingResult
+export type OptionsParsingResult<OptionValues extends ParsedOptionValues> =
+	| SuccessfulOptionsParsingResult<OptionValues>
+	| FailedOptionsParsingResult
 
 export class ParsingError extends Error {
 	constructor(errMsg: string) {
@@ -290,10 +299,10 @@ export async function parseNumberInput(
 	}
 }
 
-export function parseEnumInput(input: InputValue | undefined, enumType: any) {
+export function parseEnumInput<T extends EnumLike>(input: InputValue | undefined, enumType: T): T[keyof T] {
 	if (input == undefined) throw new ParsingError('Input was undefined')
-	let enumParser = z.nativeEnum(enumType)
-	type enumParser = z.infer<typeof enumType> // Set the type to match what has been supplied
+	let enumParser = z.nativeEnum<T>(enumType)
+	// type enumParser = z.infer<typeof enumType> // Set the type to match what has been supplied
 	return enumParser.parse(input)
 }
 
@@ -309,21 +318,30 @@ export async function parseDbInput(
 	context: CompanionActionContext | CompanionFeedbackContext,
 	input: InputValue | undefined,
 	withVariables: boolean = true
-): Promise<number | string> {
+): Promise<number> {
 	let inputStr = z.coerce.string().parse(input)
 	let numberStr = withVariables ? await context.parseVariablesInString(inputStr) : inputStr
 	if (numberStr == '-inf') {
-		return '-inf'
+		// return '-inf'
+		return -80
 	} else {
 		return await parseNumberInput(context, input, withVariables)
 	}
 }
 
-export function parseButtonInput(input: InputValue | undefined, valueOpts: InputValue[] = [0, 1, 'TOGGLE']) {
+export type DefaultButtonValues = 0 | 1 | 'TOGGLE'
+
+export type ValuesOf<T extends any[]> = T[number]
+export type UnionOfArrayElements<ARR_T extends Readonly<unknown[]>> = ARR_T[number]
+
+export function validateButtonInput<T extends any[]>(
+	input: UnionOfArrayElements<T> | undefined,
+	valueOpts: T = [0, 1, 'TOGGLE'] as T
+): UnionOfArrayElements<T> {
 	try {
 		// input = z.coerce.number().parse(input)
-		if (input == undefined) return
-		if (!valueOpts.includes(input)) throw new ParsingError('Button value is not permitted')
+		if (input == undefined) throw new ParsingError('Button value is undefined')
+		if (!valueOpts.includes(input)) throw new ParsingError('Button value is not provided as a value option')
 		return input
 	} catch (err) {
 		throw new ParsingError(getErrorMessage(err))

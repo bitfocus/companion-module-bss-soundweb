@@ -1,381 +1,271 @@
 import {
 	CompanionFeedbackBooleanEvent,
+	CompanionFeedbackButtonStyleResult,
 	CompanionFeedbackContext,
+	CompanionFeedbackDefinition,
 	CompanionFeedbackDefinitions,
 	CompanionFeedbackInfo,
-	Regex,
-	combineRgb,
+	CompanionOptionValues,
+	LogLevel,
+	SomeCompanionFeedbackInputField,
 } from '@companion-module/base'
-import { SoundwebModuleInstance } from './main'
-import {
-	ComparisonOptionValues,
-	FailedOptionsParsingResult,
-	OptionsParsingResult,
-	ParsingError,
-	buttonOption,
-	channelSelectDropdown,
-	comparisonOperationOption,
-	createVariableOption,
-	fullyQualifiedObjectAddressOption,
-	fullyQualifiedParameterAddressOption,
-	parseButtonInput,
-	parseCheckboxInput,
-	parseEnumInput,
-	parseNumberInput,
-	parseParameterAddressFromFQAddress,
-	unitOption,
-} from './options'
+import { OptionsParsingResult, ParsedOptionValues, ParsingError } from './options'
 import { ParameterUnit } from './parameters'
+import { ParameterAddress } from './sweb'
 
-function handleFeedbackOptionsParsingError(err: any, feedback: CompanionFeedbackInfo): FailedOptionsParsingResult {
-	if (err instanceof ParsingError) {
-		return {
-			success: false,
-			error: `Error parsing options for feedback "${feedback.feedbackId}" @ ${feedback.controlId} (${feedback.id}): ${err.message}`,
-		}
-	} else {
-		return {
-			success: false,
-			error: `Unknown error while parsing options for feedback "${feedback.feedbackId}" @ ${feedback.controlId} (${feedback.id}): ${err.message}`,
-		}
-	}
+// TODO There's a lot of repetition/similarities between feedbacks and actions.
+
+// A lot of this complexity is to accomodate existential ActionDefinition types by wrapping ActionDefinition<T, T2> instances
+type WrappedFeedbackDefinition = <R>(
+	cb: <OptionInputs extends CompanionOptionValues, OptionValues extends ParsedOptionValues>(
+		item: (moduleMethods: ModuleFeedbackCallbacks) => SoundwebFeedbackDefinition<OptionInputs, OptionValues>
+	) => R
+) => R
+
+type WrappedFeedbackDefinitions = WrappedFeedbackDefinition[]
+
+/**
+ * Function for creating a wrapped ActionDefinition
+ */
+export function useFeedbackDefinition<
+	OptionInputs extends CompanionOptionValues,
+	OptionValues extends ParsedOptionValues
+>(
+	feedbackDefinitionFn: (
+		moduleCallbacks: ModuleFeedbackCallbacks
+	) => SoundwebFeedbackDefinition<OptionInputs, OptionValues>
+): WrappedFeedbackDefinition {
+	return (cb) => cb(feedbackDefinitionFn)
 }
 
-async function parseOptionsForComparisonFeedback(
-	feedback: CompanionFeedbackInfo,
-	context: CompanionFeedbackContext
-): Promise<OptionsParsingResult> {
-	try {
-		let parameterAddress = await parseParameterAddressFromFQAddress(context, feedback.options.fqParamAddress)
-		let value = await parseNumberInput(context, feedback.options.value)
-		let comparisonOperation = parseEnumInput(feedback.options.comparisonOperation, ComparisonOptionValues)
-		let unit = parseEnumInput(feedback.options.unit, ParameterUnit)
-		let createVariable = parseCheckboxInput(feedback.options.createVariable)
-		return {
-			success: true,
-			options: {
-				parameterAddress: parameterAddress,
-				value: value,
-				comparisonOperation: comparisonOperation,
-				unit: unit,
-				createVariable: createVariable,
-			},
-		}
-	} catch (err) {
-		return handleFeedbackOptionsParsingError(err, feedback)
-	}
+/**
+ * Module callbacks for actions to use in their definitions
+ */
+export type ModuleFeedbackCallbacks = {
+	subscribe: (
+		feedback: CompanionFeedbackInfo,
+		paramAddress: ParameterAddress,
+		unit: ParameterUnit,
+		createVariable?: boolean
+	) => Promise<void>
+	unsubscribe: (feedback: CompanionFeedbackInfo) => Promise<void>
+	getParameterValue: (
+		paramAddress: ParameterAddress,
+		unit: ParameterUnit,
+		returnRaw?: boolean
+	) => Promise<string | number | null>
+	log: (level: LogLevel, msg: string) => void
 }
 
-async function parseOptionsForParameterVariableFeedback(
-	feedback: CompanionFeedbackInfo,
-	context: CompanionFeedbackContext
-): Promise<OptionsParsingResult> {
-	try {
-		let parameterAddress = await parseParameterAddressFromFQAddress(context, feedback.options.fqParamAddress)
-		let unit = parseEnumInput(feedback.options.unit, ParameterUnit)
-		return {
-			success: true,
-			options: {
-				parameterAddress: parameterAddress,
-				unit: unit,
-			},
-		}
-	} catch (err) {
-		return handleFeedbackOptionsParsingError(err, feedback)
-	}
+export type SoundwebFeedbackInfo<Opts extends CompanionOptionValues> = CompanionFeedbackInfo & {
+	readonly options: CompanionOptionValues | Opts // We must provide this union to avoid sub-type error
 }
 
-async function parseOptionsForGainNInputGainFeedback(
-	feedback: CompanionFeedbackInfo,
-	context: CompanionFeedbackContext
-): Promise<OptionsParsingResult> {
-	try {
-		let channelParam = (await parseNumberInput(context, feedback.options.channel)) - 1
-		let parameterAddress = await parseParameterAddressFromFQAddress(
-			context,
-			`${feedback.options.fqObjectAddress}.${channelParam}`
-		)
-		let value = await parseNumberInput(context, feedback.options.value)
-		let comparisonOperation = parseEnumInput(feedback.options.comparisonOperation, ComparisonOptionValues)
-		let unit = parseEnumInput(feedback.options.unit, ParameterUnit)
-		let createVariable = parseCheckboxInput(feedback.options.createVariable)
-
-		return {
-			success: true,
-			options: {
-				parameterAddress: parameterAddress,
-				value: value,
-				comparisonOperation: comparisonOperation,
-				unit: unit,
-				createVariable: createVariable,
-				channelParam: channelParam,
-			},
-		}
-	} catch (err) {
-		return handleFeedbackOptionsParsingError(err, feedback)
-	}
+export type SoundwebBooleanFeedbackEvent<Opts extends CompanionOptionValues> = CompanionFeedbackBooleanEvent & {
+	readonly options: CompanionOptionValues | Opts // We must provide this union to avoid sub-type error
 }
 
-async function parseOptionsForGainNInputMuteFeedback(
-	feedback: CompanionFeedbackInfo,
-	context: CompanionFeedbackContext
-): Promise<OptionsParsingResult> {
-	try {
-		let channelParam = (await parseNumberInput(context, feedback.options.channel)) - 1
-		let muteParam = channelParam + 32
-
-		let paramAddress = await parseParameterAddressFromFQAddress(
-			context,
-			`${feedback.options.fqObjectAddress}.${muteParam}`
-		)
-		let buttonValue = parseButtonInput(feedback.options.buttonValue)
-		let createVariable = parseCheckboxInput(feedback.options.createVariable)
-
-		return {
-			success: true,
-			options: {
-				paramAddress: paramAddress,
-				buttonValue: buttonValue,
-				createVariable: createVariable,
-			},
-		}
-	} catch (err) {
-		return handleFeedbackOptionsParsingError(err, feedback)
-	}
+type SoundwebFeedbackInputField<ID> = SomeCompanionFeedbackInputField & {
+	id: ID
 }
 
-export default function (module: SoundwebModuleInstance): CompanionFeedbackDefinitions {
-	return {
-		// Custom Parameter Comparison
-		comparison: {
-			name: 'Custom Parameter',
-			type: 'boolean',
-			defaultStyle: {
-				bgcolor: combineRgb(0, 204, 0),
-				color: combineRgb(255, 255, 255),
-			},
-			options: [
-				fullyQualifiedParameterAddressOption,
-				comparisonOperationOption(),
-				{
-					id: 'value',
-					type: 'textinput',
-					label: 'Value',
-					default: '0',
-					regex: Regex.SIGNED_FLOAT,
-					required: true,
-					useVariables: true,
+/**
+ * A more specific CompanionFeedbackDefinition for Soundwebs with type parameters
+ */
+export type SoundwebCompanionFeedbackDefinition<OptionInputs extends CompanionOptionValues> =
+	CompanionFeedbackDefinition & {
+		callback: (
+			action: SoundwebBooleanFeedbackEvent<OptionInputs>,
+			context: CompanionFeedbackContext
+		) => Promise<void> | void
+		subscribe?: (action: SoundwebFeedbackInfo<OptionInputs>, context: CompanionFeedbackContext) => Promise<void> | void
+		unsubscribe?: (
+			action: SoundwebFeedbackInfo<OptionInputs>,
+			context: CompanionFeedbackContext
+		) => Promise<void> | void
+	}
+
+/**
+ * Function for building Companion action definitions from our own definitions
+ */
+export function buildCompanionFeedbackDefintions(
+	moduleCallbacks: ModuleFeedbackCallbacks,
+	wrappedDefinitions: WrappedFeedbackDefinitions
+): CompanionFeedbackDefinitions {
+	let companionFeedbackDefs: CompanionFeedbackDefinitions = {}
+
+	wrappedDefinitions.forEach((wrappedFeedbackDef) => {
+		wrappedFeedbackDef((feedbackDefFn) => {
+			let feedbackProvider = new SoundwebFeedbackDefinitionProvider(moduleCallbacks, feedbackDefFn)
+			let { feedbackId, feedbackDefinition } = feedbackProvider.buildCompanionDefinition()
+			companionFeedbackDefs[feedbackId] = feedbackDefinition
+		})
+	})
+
+	return companionFeedbackDefs
+}
+
+/**
+ * Our own definition object for defining our feedbacks
+ */
+export type SoundwebFeedbackDefinition<
+	OptionInputs extends CompanionOptionValues,
+	OptionValues extends ParsedOptionValues
+> = {
+	feedbackId: string
+
+	name: string
+
+	type: 'boolean' | 'advanced'
+
+	description?: string
+
+	defaultStyle: Partial<CompanionFeedbackButtonStyleResult>
+
+	options: SoundwebFeedbackInputField<keyof OptionInputs>[]
+
+	parseOptions: (props: {
+		feedback: SoundwebFeedbackInfo<OptionInputs>
+		context: CompanionFeedbackContext
+	}) => Promise<OptionValues>
+
+	callback: (props: {
+		feedback: SoundwebBooleanFeedbackEvent<OptionInputs>
+		context: CompanionFeedbackContext
+		options: OptionValues
+	}) => Promise<boolean>
+
+	subscribe?: (props: {
+		feedback: SoundwebFeedbackInfo<OptionInputs>
+		context: CompanionFeedbackContext
+		options: OptionValues
+	}) => Promise<void>
+
+	unsubscribe?: (props: {
+		feedback: SoundwebFeedbackInfo<OptionInputs>
+		context: CompanionFeedbackContext
+		options: OptionValues
+	}) => Promise<void>
+}
+
+/**
+ * A provider for Companion Feedback Definitions from our specialised Soundweb Feedback Definitions
+ */
+class SoundwebFeedbackDefinitionProvider<
+	OptionInputs extends CompanionOptionValues,
+	OptionValues extends ParsedOptionValues
+> {
+	#definition: SoundwebFeedbackDefinition<OptionInputs, OptionValues>
+
+	constructor(
+		public moduleCallbacks: ModuleFeedbackCallbacks,
+		definitionFn: (moduleCallbacks: ModuleFeedbackCallbacks) => SoundwebFeedbackDefinition<OptionInputs, OptionValues>
+	) {
+		this.#definition = definitionFn(moduleCallbacks)
+	}
+
+	async #parseOptions(
+		feedback: CompanionFeedbackInfo,
+		context: CompanionFeedbackContext
+	): Promise<OptionsParsingResult<OptionValues>> {
+		try {
+			let options = await this.#definition.parseOptions({ feedback: feedback, context: context }) // << Throws if there is a parsing error
+			return {
+				success: true,
+				options: options,
+			}
+		} catch (err) {
+			if (err instanceof ParsingError) {
+				return {
+					success: false,
+					error: `Error parsing options for feedback "${feedback.feedbackId}" @ ${feedback.controlId}: ${
+						err.message
+					} ${JSON.stringify(feedback.options)}`,
+				}
+			} else {
+				return {
+					success: false,
+					error: `Unknown error while parsing options for feedback "${feedback.feedbackId}" @ ${
+						feedback.controlId
+					}: ${err} ${JSON.stringify(feedback.options)}`,
+				}
+			}
+		}
+	}
+
+	async #subscribe(feedback: SoundwebFeedbackInfo<OptionInputs>, context: CompanionFeedbackContext): Promise<void> {
+		if (this.#definition.subscribe == undefined) return
+		let parseResult = await this.#parseOptions(feedback, context)
+		if (parseResult.success == false) return this.moduleCallbacks.log('error', parseResult.error)
+		this.moduleCallbacks.log('debug', `FEEDBACK SUBSCRIBED: "${feedback.feedbackId}" @ ${feedback.controlId}`)
+		await this.#definition.subscribe({
+			feedback: feedback,
+			context: context,
+			options: parseResult.options,
+		})
+	}
+
+	async #unsubscribe(feedback: SoundwebFeedbackInfo<OptionInputs>, context: CompanionFeedbackContext): Promise<void> {
+		if (this.#definition.unsubscribe == undefined) return
+		let parseResult = await this.#parseOptions(feedback, context)
+		if (parseResult.success == false) return this.moduleCallbacks.log('error', parseResult.error)
+		this.moduleCallbacks.log('debug', `FEEDBACK UNSUBSCRIBED: "${feedback.feedbackId}" @ ${feedback.controlId}`)
+		await this.#definition.unsubscribe({
+			feedback: feedback,
+			context: context,
+			// moduleCallbacks: this.moduleCallbacks,
+			options: parseResult.options,
+		})
+	}
+
+	async #callback(
+		feedback: SoundwebBooleanFeedbackEvent<OptionInputs>,
+		context: CompanionFeedbackContext
+	): Promise<boolean> {
+		let parseResult = await this.#parseOptions(feedback, context)
+
+		if (parseResult.success == false) {
+			this.moduleCallbacks.log('error', parseResult.error)
+			return false
+		}
+
+		// If options are successfully parsed...
+		this.moduleCallbacks.log('debug', `FEEDBACK TRIGGERED: "${feedback.feedbackId}" @ ${feedback.controlId}`)
+
+		let result
+		try {
+			result = await this.#definition.callback({
+				feedback: feedback,
+				context: context,
+				options: parseResult.options,
+			})
+		} catch (error) {
+			this.moduleCallbacks.log(
+				'error',
+				`There was an error calling the feedback "${feedback.feedbackId}".  Error message: ${error}`
+			)
+		}
+
+		return result != undefined ? result : false
+	}
+
+	buildCompanionDefinition(): { feedbackId: string; feedbackDefinition: CompanionFeedbackDefinition } {
+		return {
+			feedbackId: this.#definition.feedbackId,
+			feedbackDefinition: {
+				name: this.#definition.name,
+				type: 'boolean', // We're only supporting Boolean feedbacks atm
+				defaultStyle: this.#definition.defaultStyle,
+				options: this.#definition.options,
+				description: this.#definition.description,
+				callback: async (feedback: CompanionFeedbackBooleanEvent, context: CompanionFeedbackContext) => {
+					return await this.#callback(feedback, context)
 				},
-				unitOption(),
-				createVariableOption(),
-			],
-			callback: async (feedback: CompanionFeedbackBooleanEvent, context: CompanionFeedbackContext) => {
-				// module.log('debug', `Feedback: ${feedback.feedbackId}: ${feedback.id} triggered`)
-				let parsed = await parseOptionsForComparisonFeedback(feedback, context)
-				if (parsed.success == false) {
-					module.log('error', parsed.error)
-					return false
-				}
-
-				let { parameterAddress, value, unit, comparisonOperation, createVariable } = parsed.options
-
-				// We need to subscribe the feedback here to support variables that may have been updated in options
-				await module.subscribeFeedback(feedback, parameterAddress, unit, createVariable)
-
-				let currentState = await module.getParameterValue(parameterAddress, unit)
-
-				if (currentState == null) return false
-
-				switch (comparisonOperation) {
-					case ComparisonOptionValues.LESS_THAN:
-						return currentState < value
-					case ComparisonOptionValues.GREATER_THAN:
-						return currentState > value
-					case ComparisonOptionValues.GREATER_THAN_EQUAL:
-						return currentState >= value
-					case ComparisonOptionValues.LESS_THAN_EQUAL:
-						return currentState <= value
-					case ComparisonOptionValues.EQUAL:
-						return currentState == value
-					default:
-						throw Error(`Unhandled error during callback of Feedback: ${feedback.feedbackId}`)
-				}
+				subscribe: async (feedback: CompanionFeedbackInfo, context: CompanionFeedbackContext) =>
+					await this.#subscribe(feedback, context),
+				unsubscribe: async (feedback: CompanionFeedbackInfo, context: CompanionFeedbackContext) =>
+					await this.#unsubscribe(feedback, context),
 			},
-
-			subscribe: async (feedback: CompanionFeedbackInfo, context: CompanionFeedbackContext) => {
-				let optionsParsingResult = await parseOptionsForComparisonFeedback(feedback, context)
-				if (optionsParsingResult.success == false) {
-					module.log('error', optionsParsingResult.error)
-					return
-				}
-				let { parameterAddress, unit, createVariable } = optionsParsingResult.options
-				await module.subscribeFeedback(feedback, parameterAddress, unit, createVariable)
-			},
-
-			unsubscribe: async (feedback: CompanionFeedbackInfo) => {
-				await module.unsubscribeFeedback(feedback)
-			},
-		},
-
-		// Custom Parameter Variable
-		parameterVariable: {
-			name: 'Parameter Variable',
-			type: 'boolean',
-			defaultStyle: {},
-			options: [fullyQualifiedParameterAddressOption, unitOption()],
-			callback: async (feedback: CompanionFeedbackBooleanEvent, context: CompanionFeedbackContext) => {
-				// module.log('debug', `Feedback: ${feedback.feedbackId}: ${feedback.id} triggered`)
-				let parsed = await parseOptionsForParameterVariableFeedback(feedback, context)
-				if (parsed.success == false) {
-					module.log('error', parsed.error)
-					return false
-				}
-
-				let { parameterAddress, unit } = parsed.options
-
-				// We need to subscribe the feedback here to support variables that may have been updated in options
-				await module.subscribeFeedback(feedback, parameterAddress, unit, true)
-				return false
-			},
-
-			subscribe: async (feedback: CompanionFeedbackInfo, context: CompanionFeedbackContext) => {
-				let optionsParsingResult = await parseOptionsForParameterVariableFeedback(feedback, context)
-				if (optionsParsingResult.success == false) {
-					module.log('error', optionsParsingResult.error)
-					return
-				}
-				let { parameterAddress, unit } = optionsParsingResult.options
-				await module.subscribeFeedback(feedback, parameterAddress, unit, true)
-			},
-
-			unsubscribe: async (feedback: CompanionFeedbackInfo) => {
-				await module.unsubscribeFeedback(feedback)
-			},
-		},
-
-		// GAIN N-INPUT: GAIN
-		gain_n_input_gain: {
-			name: 'Gain N-Input: Gain',
-			type: 'boolean',
-			defaultStyle: {
-				bgcolor: combineRgb(0, 204, 0),
-				color: combineRgb(255, 255, 255),
-			},
-			options: [
-				fullyQualifiedObjectAddressOption,
-				channelSelectDropdown(32),
-				comparisonOperationOption(),
-				{
-					id: 'value',
-					type: 'textinput',
-					label: 'Level',
-					default: '0',
-					useVariables: true,
-					regex: '/^-?\\d+|-inf$/',
-				},
-				unitOption(ParameterUnit.DB, [ParameterUnit.DB, ParameterUnit.PERCENT]),
-				createVariableOption(),
-			],
-			callback: async (feedback: CompanionFeedbackBooleanEvent, context: CompanionFeedbackContext) => {
-				// module.log('debug', `Feedback: ${feedback.feedbackId}: ${feedback.id} triggered`)
-				let parsed = await parseOptionsForGainNInputGainFeedback(feedback, context)
-				if (parsed.success == false) {
-					module.log('error', parsed.error)
-					return false
-				}
-
-				let { parameterAddress, value, unit, comparisonOperation, createVariable } = parsed.options
-
-				// We need to subscribe the feedback here to support variables that may have been updated in options
-				await module.subscribeFeedback(feedback, parameterAddress, unit, createVariable)
-
-				let currentState = await module.getParameterValue(parameterAddress, unit)
-
-				if (currentState == null) return false
-
-				switch (comparisonOperation) {
-					case ComparisonOptionValues.LESS_THAN:
-						return currentState < value
-					case ComparisonOptionValues.GREATER_THAN:
-						return currentState > value
-					case ComparisonOptionValues.GREATER_THAN_EQUAL:
-						return currentState >= value
-					case ComparisonOptionValues.LESS_THAN_EQUAL:
-						return currentState <= value
-					case ComparisonOptionValues.EQUAL:
-						return currentState == value
-					default:
-						throw Error(`Unhandled error during callback of Feedback: ${feedback.feedbackId}`)
-				}
-			},
-
-			subscribe: async (feedback: CompanionFeedbackInfo, context: CompanionFeedbackContext) => {
-				let optionsParsingResult = await parseOptionsForGainNInputGainFeedback(feedback, context)
-				if (optionsParsingResult.success == false) {
-					module.log('error', optionsParsingResult.error)
-					return
-				}
-				let { parameterAddress, unit, createVariable } = optionsParsingResult.options
-				await module.subscribeFeedback(feedback, parameterAddress, unit, createVariable)
-			},
-
-			unsubscribe: async (feedback: CompanionFeedbackInfo) => {
-				await module.unsubscribeFeedback(feedback)
-			},
-		},
-		// GAIN N-INPUT: MUTE
-		gain_n_input_mute: {
-			name: 'Gain N-Input: Mute',
-			type: 'boolean',
-			defaultStyle: {
-				bgcolor: combineRgb(255, 0, 0),
-				color: combineRgb(255, 255, 255),
-			},
-			options: [
-				fullyQualifiedObjectAddressOption,
-				channelSelectDropdown(32),
-				buttonOption({
-					label: 'Mute on/off',
-					choices: [
-						{ id: 0, label: 'Off' },
-						{ id: 1, label: 'On' },
-					],
-				}),
-				createVariableOption(),
-			],
-			callback: async (feedback: CompanionFeedbackBooleanEvent, context: CompanionFeedbackContext) => {
-				// module.log('debug', `Feedback: ${feedback.feedbackId}: ${feedback.id} triggered`)
-				let parsed = await parseOptionsForGainNInputMuteFeedback(feedback, context)
-				if (parsed.success == false) {
-					module.log('error', parsed.error)
-					return false
-				}
-
-				let { paramAddress, buttonValue, createVariable } = parsed.options
-
-				// We need to subscribe the feedback here to support variables that may have been updated in options
-				await module.subscribeFeedback(feedback, paramAddress, ParameterUnit.RAW, createVariable)
-
-				let currentState = await module.getParameterValue(paramAddress, ParameterUnit.RAW)
-
-				if (currentState == null) return false
-
-				return currentState == buttonValue
-			},
-
-			subscribe: async (feedback: CompanionFeedbackInfo, context: CompanionFeedbackContext) => {
-				let optionsParsingResult = await parseOptionsForGainNInputMuteFeedback(feedback, context)
-				if (optionsParsingResult.success == false) {
-					module.log('error', optionsParsingResult.error)
-					return
-				}
-				let { paramAddress, createVariable } = optionsParsingResult.options
-				await module.subscribeFeedback(feedback, paramAddress, ParameterUnit.RAW, createVariable)
-			},
-
-			unsubscribe: async (feedback: CompanionFeedbackInfo) => {
-				await module.unsubscribeFeedback(feedback)
-			},
-		},
+		}
 	}
 }

@@ -1,5 +1,7 @@
 import {
+	CompanionActionDefinitions,
 	CompanionActionInfo,
+	CompanionFeedbackDefinitions,
 	CompanionFeedbackInfo,
 	CompanionVariableDefinition,
 	CompanionVariableValues,
@@ -9,14 +11,14 @@ import {
 	TCPHelper,
 	runEntrypoint,
 } from '@companion-module/base'
-import getActionDefinitions from './actions'
-import { SoundwebConfig, getConfigFields } from './config'
-import UpgradeScripts from './upgrades'
-// const bssLib = require('./bss_lib');
 import { setTimeout as asynSetTimeout } from 'timers/promises'
 import { ZodError, z } from 'zod'
+import actionDefinitions from './actionDefinitions'
+import { buildCompanionActionDefintions } from './actions'
+import { SoundwebConfig, getConfigFields } from './config'
 import { DependentType } from './dependents'
-import getFeedbackDefinitions from './feedbacks'
+import feedbackDefinitions from './feedbackDefinitions'
+import { buildCompanionFeedbackDefintions } from './feedbacks'
 import { ParameterSetType } from './options'
 import {
 	ParameterSubscriptionManager,
@@ -25,6 +27,7 @@ import {
 	ParameterValueChangeNotification,
 } from './parameters'
 import * as sweb from './sweb'
+import UpgradeScripts from './upgrades'
 import { VariableManager } from './variableManager'
 import { ModuleConnectionStatus, NodeConnectionWatchdog, NodeOnlineStatus } from './watchdog'
 
@@ -54,14 +57,16 @@ function buildSwebMsgLogEntry(
  * @param unit The unit for the given value
  * @returns The equivalent raw value for the parameter
  */
-function convertUnitToRaw(value: number, unit: ParameterUnit) {
+function convertUnitToRaw(value: number | '-inf', unit: ParameterUnit) {
 	switch (unit) {
 		case ParameterUnit.DB:
 			return sweb.dbToRaw(value)
 		case ParameterUnit.PERCENT:
+			if (typeof value != 'number') throw Error('Percent value has to be of type number')
 			return sweb.percentToRaw(value)
 		case ParameterUnit.BOOL:
 		case ParameterUnit.RAW:
+			if (typeof value != 'number') throw Error('Raw value has to be of type number')
 			return value
 		default:
 			throw Error(`Parameter unit: ${ParameterUnit[unit]} is not supported yet.`)
@@ -372,6 +377,45 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 		this.variableManager?.updateModuleVariableValues(variableIds, notification.value)
 	}
 
+	buildActionDefinitions(): CompanionActionDefinitions {
+		let moduleCallbacks = {
+			subscribe: async (action: CompanionActionInfo, paramAddress: sweb.ParameterAddress, unit: ParameterUnit) =>
+				await this.subscribeAction(action, paramAddress, unit),
+			unsubscribe: async (action: CompanionActionInfo) => await this.unsubscribeAction(action),
+			setParameterValue: async (
+				paramAddress: sweb.ParameterAddress,
+				setType: ParameterSetType,
+				value: number,
+				unit: ParameterUnit = ParameterUnit.RAW
+			) => await this.deviceSetParameterValue(paramAddress, setType, value, unit),
+			setToggle: async (
+				paramAddress: sweb.ParameterAddress,
+				unit: ParameterUnit,
+				toggleValues: Array<number | string> = []
+			) => await this.deviceSetToggle(paramAddress, unit, toggleValues),
+			log: (level: LogLevel, msg: string) => this.log(level, msg),
+		}
+
+		return buildCompanionActionDefintions(moduleCallbacks, actionDefinitions)
+	}
+
+	buildFeedbackDefinitions(): CompanionFeedbackDefinitions {
+		let moduleCallbacks = {
+			subscribe: async (
+				feedback: CompanionFeedbackInfo,
+				paramAddress: sweb.ParameterAddress,
+				unit: ParameterUnit,
+				createVariable?: boolean
+			) => await this.subscribeFeedback(feedback, paramAddress, unit, createVariable),
+			unsubscribe: async (feedback: CompanionFeedbackInfo) => await this.unsubscribeFeedback(feedback),
+			getParameterValue: async (paramAddress: sweb.ParameterAddress, unit: ParameterUnit) =>
+				await this.getParameterValue(paramAddress, unit),
+			log: (level: LogLevel, msg: string) => this.log(level, msg),
+		}
+
+		return buildCompanionFeedbackDefintions(moduleCallbacks, feedbackDefinitions)
+	}
+
 	// TODO Move all these device methods into some sort of comms object??
 
 	/**
@@ -469,6 +513,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 		if (!this.connectionWatchdog?.nodeOnline(paramAddress.node)) return
 
 		value = convertUnitToRaw(value, unit)
+
 		switch (unit) {
 			case ParameterUnit.PERCENT:
 				this.logTX(sweb.MessageType.SET_PERCENT, paramAddress, value)
@@ -631,7 +676,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 	}
 
 	/**
-	 * Let the module know that an action has been deleted on the settings have changed
+	 * Let the module know that an action has been deleted or the options have changed
 	 */
 	async unsubscribeAction(action: CompanionActionInfo) {
 		this.log('debug', `Unsubscribing action: '${action.actionId}' @ ${action.controlId} (${action.id})`)
@@ -643,7 +688,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 	}
 
 	/**
-	 * Let the module know when a feedback has been create
+	 * Let the module know when a feedback has been created/edited
 	 */
 	async subscribeFeedback(
 		feedback: CompanionFeedbackInfo,
@@ -688,9 +733,11 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 		this.variableManager?.clearDefinitions()
 		this.connectionWatchdog?.clearDependencies()
 
-		this.setActionDefinitions(getActionDefinitions(this))
-		this.setFeedbackDefinitions(getFeedbackDefinitions(this))
+		// Set the action and feedback definitions
+		this.setActionDefinitions(this.buildActionDefinitions())
+		this.setFeedbackDefinitions(this.buildFeedbackDefinitions())
 
+		// Make sure all feedbacks and actions are subscribed
 		this.subscribeFeedbacks()
 		this.subscribeActions()
 	}

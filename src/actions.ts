@@ -1,333 +1,246 @@
 import {
 	CompanionActionContext,
+	CompanionActionDefinition,
 	CompanionActionDefinitions,
 	CompanionActionEvent,
 	CompanionActionInfo,
+	CompanionOptionValues,
+	LogLevel,
+	SomeCompanionActionInputField,
 } from '@companion-module/base'
-import { SoundwebModuleInstance } from './main'
-import {
-	FailedOptionsParsingResult,
-	OptionsParsingResult,
-	ParameterSetType,
-	ParsingError,
-	buttonOption,
-	channelSelectDropdown,
-	fullyQualifiedObjectAddressOption,
-	fullyQualifiedParameterAddressOption,
-	parseButtonInput,
-	parseDbInput,
-	parseEnumInput,
-	parseNumberInput,
-	parseParameterAddressFromFQAddress,
-	setTypeOption,
-	unitOption,
-} from './options'
+import { OptionsParsingResult, ParameterSetType, ParsedOptionValues, ParsingError } from './options'
 import { ParameterUnit } from './parameters'
-import { getRegexRange } from './utils'
+import { ParameterAddress } from './sweb'
 
-function handleActionOptionsParsingError(err: any, action: CompanionActionInfo): FailedOptionsParsingResult {
-	if (err instanceof ParsingError) {
-		return {
-			success: false,
-			error: `Error parsing options for action "${action.actionId}" @ ${action.controlId} (${action.id}): ${err.message}`,
-		}
-	} else {
-		return {
-			success: false,
-			error: `Unknown error while parsing options for action "${action.actionId}" @ ${action.controlId} (${action.id})`,
-		}
-	}
+// A lot of this complexity is to accomodate existential ActionDefinition types by wrapping ActionDefinition<T, T2> instances
+type WrappedActionDefinition = <R>(
+	cb: <ActionOptionInputs extends CompanionOptionValues, OptionValues extends ParsedOptionValues>(
+		item: (moduleMethods: ModuleActionCallbacks) => SoundwebActionDefinition<ActionOptionInputs, OptionValues>
+	) => R
+) => R
+
+type WrappedActionDefinitions = WrappedActionDefinition[]
+
+/**
+ * Function for creating a wrapped ActionDefinition
+ */
+export function useActionDefinition<
+	OptionInputs extends CompanionOptionValues,
+	OptionValues extends ParsedOptionValues
+>(
+	actionDefinitionFn: (moduleMethods: ModuleActionCallbacks) => SoundwebActionDefinition<OptionInputs, OptionValues>
+): WrappedActionDefinition {
+	return (cb) => cb(actionDefinitionFn)
 }
 
-async function parseOptionsForSetParameterAction(
-	action: CompanionActionInfo,
-	context: CompanionActionContext
-): Promise<OptionsParsingResult> {
-	let paramAddress
-	let value
-	let setType
-	let unit
-	try {
-		paramAddress = await parseParameterAddressFromFQAddress(context, action.options.fqParamAddress)
-		value = await parseNumberInput(context, action.options.value)
-		setType = parseEnumInput(action.options.setType, ParameterSetType)
-		unit = parseEnumInput(action.options.unit, ParameterUnit)
-	} catch (err) {
-		return handleActionOptionsParsingError(err, action)
+/**
+ * A more specific CompanionActionDefinition for Soundwebs with type parameters
+ */
+export type SoundwebCompanionActionDefinition<ActionOptionInputs extends CompanionOptionValues> =
+	CompanionActionDefinition & {
+		callback: (action: SoundwebActionEvent<ActionOptionInputs>, context: CompanionActionContext) => Promise<void> | void
+		subscribe?: (
+			action: SoundwebActionInfo<ActionOptionInputs>,
+			context: CompanionActionContext
+		) => Promise<void> | void
+		unsubscribe?: (
+			action: SoundwebActionInfo<ActionOptionInputs>,
+			context: CompanionActionContext
+		) => Promise<void> | void
 	}
-	return {
-		success: true,
-		options: {
-			paramAddress: paramAddress,
-			value: value,
-			setType: setType,
-			unit: unit,
-		},
-	}
+
+/**
+ * Function for building Companion action definitions from our own definitions
+ */
+export function buildCompanionActionDefintions(
+	moduleCallbacks: ModuleActionCallbacks,
+	wrappedActionDefinitions: WrappedActionDefinitions
+): CompanionActionDefinitions {
+	let companionActionDefs: CompanionActionDefinitions = {}
+
+	wrappedActionDefinitions.forEach((wrappedActionDef) => {
+		wrappedActionDef((actionDefFn) => {
+			let actionProvider = new SoundwebActionDefinitionProvider(moduleCallbacks, actionDefFn)
+			let { actionId, actionDefinition } = actionProvider.buildCompanionDefinition()
+			companionActionDefs[actionId] = actionDefinition
+		})
+	})
+
+	return companionActionDefs
 }
 
-async function parseOptionsForButtonAction(
-	action: CompanionActionInfo,
-	context: CompanionActionContext
-): Promise<OptionsParsingResult> {
-	let paramAddress
-	let buttonValue
-	try {
-		paramAddress = await parseParameterAddressFromFQAddress(context, action.options.fqParamAddress)
-		buttonValue = parseButtonInput(action.options.buttonValue)
-	} catch (err) {
-		return handleActionOptionsParsingError(err, action)
-	}
-	return {
-		success: true,
-		options: {
-			paramAddress: paramAddress,
-			buttonValue: buttonValue,
-		},
-	}
+/**
+ * Module callbacks for actions to use in their definitions
+ */
+export type ModuleActionCallbacks = {
+	subscribe: (action: CompanionActionInfo, paramAddress: ParameterAddress, unit: ParameterUnit) => Promise<void>
+	unsubscribe: (action: CompanionActionInfo) => Promise<void>
+	setParameterValue: (
+		paramAddress: ParameterAddress,
+		setType: ParameterSetType,
+		value: number,
+		unit?: ParameterUnit
+	) => Promise<void>
+	setToggle: (
+		paramAddress: ParameterAddress,
+		unit: ParameterUnit,
+		toggleValues?: Array<number | string>
+	) => Promise<void>
+	log: (level: LogLevel, msg: string) => void
 }
 
-async function parseOptionsForGainNInputGainAction(
-	action: CompanionActionInfo,
-	context: CompanionActionContext
-): Promise<OptionsParsingResult> {
-	let paramAddress
-	let channelParam
-	let setType
-	let unit
-	let value
-	try {
-		channelParam = (await parseNumberInput(context, action.options.channel)) - 1
-		paramAddress = await parseParameterAddressFromFQAddress(
-			context,
-			`${action.options.fqObjectAddress}.${channelParam}`
-		)
-		setType = parseEnumInput(action.options.setType, ParameterSetType)
-		unit = parseEnumInput(action.options.unit, ParameterUnit)
-
-		switch (unit) {
-			case ParameterUnit.DB:
-				value = await parseDbInput(context, action.options.value)
-				break
-			default:
-				value = await parseNumberInput(context, action.options.value)
-		}
-	} catch (err) {
-		return handleActionOptionsParsingError(err, action)
-	}
-	return {
-		success: true,
-		options: {
-			paramAddress: paramAddress,
-			setType: setType,
-			unit: unit,
-			value: value,
-		},
-	}
+export type SoundwebActionInfo<Opts extends CompanionOptionValues> = CompanionActionInfo & {
+	readonly options: CompanionOptionValues | Opts // We must provide this union to avoid sub-type error
 }
 
-async function parseOptionsForGainNInputMuteAction(
-	action: CompanionActionInfo,
-	context: CompanionActionContext
-): Promise<OptionsParsingResult> {
-	try {
-		let channelParam = (await parseNumberInput(context, action.options.channel)) - 1
-		channelParam = channelParam + 32
-		let paramAddress = await parseParameterAddressFromFQAddress(
-			context,
-			`${action.options.fqObjectAddress}.${channelParam}`
-		)
-		let buttonValue = parseButtonInput(action.options.buttonValue)
-		return {
-			success: true,
-			options: {
-				paramAddress: paramAddress,
-				buttonValue: buttonValue,
-			},
-		}
-	} catch (err) {
-		return handleActionOptionsParsingError(err, action)
-	}
+export type SoundwebActionEvent<Opts extends CompanionOptionValues> =
+	| CompanionActionEvent & {
+			readonly options: CompanionOptionValues | Opts // We must provide this union to avoid sub-type error
+	  }
+
+type SoundwebActionInputField<ID> = SomeCompanionActionInputField & {
+	id: ID
 }
 
-export default function (module: SoundwebModuleInstance): CompanionActionDefinitions {
-	return {
-		setParameter: {
-			name: 'Set parameter',
-			options: [
-				fullyQualifiedParameterAddressOption,
-				{
-					id: 'value',
-					type: 'textinput',
-					label: 'Value',
-					default: '0',
-					useVariables: true,
-				},
-				setTypeOption(ParameterSetType.ABSOLUTE, [ParameterSetType.ABSOLUTE, ParameterSetType.RELATIVE]),
-				unitOption(),
-			],
-			callback: async (action: CompanionActionEvent, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForSetParameterAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
+/**
+ * Our own definition object for defining our actions
+ */
+export type SoundwebActionDefinition<
+	ActionOptionInputs extends CompanionOptionValues,
+	ActionOptionValues extends ParsedOptionValues
+> = {
+	actionId: string
 
-				// If options are successfully parsed...
-				let { paramAddress, value, setType, unit } = parsed.options
-				module.log('debug', `Action for parameter: ${paramAddress.toString()} has been trigered.`)
-				await module.deviceSetParameterValue(paramAddress, setType, value, unit)
-			},
+	name: string
 
-			subscribe: async (action: CompanionActionInfo, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForSetParameterAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
+	description?: string
 
-				let { paramAddress, unit } = parsed.options
-				await module.subscribeAction(action, paramAddress, unit)
-			},
+	options: SoundwebActionInputField<keyof ActionOptionInputs>[]
 
-			unsubscribe: async (action: CompanionActionInfo, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForSetParameterAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
-				await module.unsubscribeAction(action)
-			},
-		},
-		button: {
-			name: 'Custom Button',
-			options: [fullyQualifiedParameterAddressOption, buttonOption()],
-			callback: async (action: CompanionActionEvent, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForButtonAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
+	parseOptions: (props: {
+		action: SoundwebActionInfo<ActionOptionInputs>
+		context: CompanionActionContext
+	}) => Promise<ActionOptionValues>
 
-				let { paramAddress, buttonValue } = parsed.options
-				module.log('debug', `Action for parameter: ${paramAddress.toString()} has been trigered.`)
+	callback: (props: {
+		action: SoundwebActionEvent<ActionOptionInputs>
+		context: CompanionActionContext
+		options: ActionOptionValues
+	}) => Promise<void>
 
-				// We must subscribe here incase a variable has changed in the parameter address
-				await module.subscribeAction(action, paramAddress, ParameterUnit.RAW)
+	subscribe?: (props: {
+		action: SoundwebActionInfo<ActionOptionInputs>
+		context: CompanionActionContext
+		options: ActionOptionValues
+	}) => Promise<void>
 
-				if (buttonValue == 'TOGGLE') {
-					await module.deviceSetToggle(paramAddress, ParameterUnit.RAW)
-				} else {
-					await module.deviceSetParameterValue(paramAddress, ParameterSetType.ABSOLUTE, buttonValue)
+	unsubscribe?: (props: {
+		action: SoundwebActionInfo<ActionOptionInputs>
+		context: CompanionActionContext
+		options: ActionOptionValues
+	}) => Promise<void>
+}
+
+/**
+ * A provider for Companion Action Definitions from our specialised Soundweb Action Definitions
+ */
+class SoundwebActionDefinitionProvider<
+	OptionInputs extends CompanionOptionValues,
+	OptionValues extends ParsedOptionValues
+> {
+	#definition: SoundwebActionDefinition<OptionInputs, OptionValues>
+
+	constructor(
+		public moduleCallbacks: ModuleActionCallbacks,
+		definitionFn: (moduleCallbacks: ModuleActionCallbacks) => SoundwebActionDefinition<OptionInputs, OptionValues>
+	) {
+		this.#definition = definitionFn(moduleCallbacks)
+	}
+
+	async #parseOptions(
+		action: CompanionActionInfo,
+		context: CompanionActionContext
+	): Promise<OptionsParsingResult<OptionValues>> {
+		try {
+			let options = await this.#definition.parseOptions({ action: action, context: context }) // << Throws if there is a parsing error
+			return {
+				success: true,
+				options: options,
+			}
+		} catch (err) {
+			if (err instanceof ParsingError) {
+				return {
+					success: false,
+					error: `Error parsing options for action "${action.actionId}" @ ${action.controlId} (${action.id}): ${err.message}`,
 				}
-			},
-
-			subscribe: async (action: CompanionActionInfo, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForButtonAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
-
-				let { paramAddress } = parsed.options
-				await module.subscribeAction(action, paramAddress, ParameterUnit.RAW)
-			},
-
-			unsubscribe: async (action: CompanionActionInfo, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForButtonAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
-				await module.unsubscribeAction(action)
-			},
-		},
-		gain_n_input_gain: {
-			name: 'Gain N-Input: Gain',
-			options: [
-				fullyQualifiedObjectAddressOption,
-				channelSelectDropdown(32),
-				{
-					id: 'value',
-					type: 'textinput',
-					label: 'Level',
-					default: '0',
-					useVariables: true,
-					regex: `/^(${getRegexRange(-80, 100)}(\\.${getRegexRange(0, 99)})?|-inf)$/`,
-				},
-				unitOption(ParameterUnit.DB, [ParameterUnit.DB, ParameterUnit.PERCENT]),
-				setTypeOption(),
-				// {
-				// 	id: 'limit',
-				// 	type: 'checkbox',
-				// 	label: 'Limit?',
-				// 	default: false,
-				// 	// isVisible: (options) => options.setType == ParameterSetType.RELATIVE
-				// },
-				// {
-				// 	id: 'limitMax',
-				// 	type: 'textinput',
-				// 	label: 'Max',
-				// 	default: '10',
-				// 	useVariables: true,
-				// 	isVisible: (options) => options.limit == true,
-				// },
-				// {
-				// 	id: 'limitMin',
-				// 	type: 'textinput',
-				// 	label: 'Min',
-				// 	default: '-inf',
-				// 	useVariables: true,
-				// 	isVisible: (options) => options.limit == true,
-				// },
-			],
-			callback: async (action: CompanionActionEvent, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForGainNInputGainAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
-
-				let { paramAddress, setType, value, unit } = parsed.options
-				module.log('debug', `Action for parameter: ${paramAddress.toString()} has been trigered.`)
-
-				// We must subscribe here incase a variable has changed in the object address
-				await module.subscribeAction(action, paramAddress, ParameterUnit.DB)
-
-				await module.deviceSetParameterValue(paramAddress, setType, value, unit)
-			},
-
-			subscribe: async (action: CompanionActionInfo, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForGainNInputGainAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
-
-				let { paramAddress } = parsed.options
-				await module.subscribeAction(action, paramAddress, ParameterUnit.RAW)
-			},
-
-			unsubscribe: async (action: CompanionActionInfo, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForGainNInputGainAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
-				await module.unsubscribeAction(action)
-			},
-		},
-		gain_n_input_mute: {
-			name: 'Gain N-Input: Mute',
-			options: [
-				fullyQualifiedObjectAddressOption,
-				channelSelectDropdown(32),
-				buttonOption({
-					label: 'Mute on/off',
-				}),
-			],
-			callback: async (action: CompanionActionEvent, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForGainNInputMuteAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
-
-				let { paramAddress, buttonValue } = parsed.options
-				module.log('debug', `Action for parameter: ${paramAddress.toString()} has been trigered.`)
-
-				// We must subscribe here incase a variable has changed in the object address
-				await module.subscribeAction(action, paramAddress, ParameterUnit.RAW)
-
-				if (buttonValue == 'TOGGLE') {
-					await module.deviceSetToggle(paramAddress, ParameterUnit.RAW)
-				} else {
-					await module.deviceSetParameterValue(paramAddress, ParameterSetType.ABSOLUTE, buttonValue)
+			} else {
+				return {
+					success: false,
+					error: `Unknown error while parsing options for action "${action.actionId}" @ ${action.controlId} (${action.id})`,
 				}
-			},
+			}
+		}
+	}
 
-			subscribe: async (action: CompanionActionInfo, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForGainNInputMuteAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
-				let { paramAddress } = parsed.options
-				await module.subscribeAction(action, paramAddress, ParameterUnit.RAW)
-			},
+	async #subscribe(action: SoundwebActionInfo<OptionInputs>, context: CompanionActionContext): Promise<void> {
+		if (this.#definition.subscribe == undefined) return
+		let parseResult = await this.#parseOptions(action, context)
+		if (parseResult.success == false) return this.moduleCallbacks.log('error', parseResult.error)
+		this.moduleCallbacks.log('debug', `ACTION SUBSCRIBED: "${action.actionId}" @ ${action.controlId} (${action.id})`)
+		await this.#definition.subscribe({
+			action: action,
+			context: context,
+			options: parseResult.options,
+		})
+	}
 
-			unsubscribe: async (action: CompanionActionInfo, context: CompanionActionContext) => {
-				let parsed = await parseOptionsForGainNInputMuteAction(action, context)
-				if (parsed.success == false) return module.log('error', parsed.error)
-				await module.unsubscribeAction(action)
+	async #unsubscribe(action: SoundwebActionInfo<OptionInputs>, context: CompanionActionContext): Promise<void> {
+		if (this.#definition.unsubscribe == undefined) return
+		let parseResult = await this.#parseOptions(action, context)
+		if (parseResult.success == false) return this.moduleCallbacks.log('error', parseResult.error)
+		this.moduleCallbacks.log('debug', `ACTION UNSUBSCRIBED: "${action.actionId}" @ ${action.controlId}`)
+		await this.#definition.unsubscribe({
+			action: action,
+			context: context,
+			options: parseResult.options,
+		})
+	}
+
+	async #callback(action: CompanionActionEvent, context: CompanionActionContext): Promise<void> {
+		let parseResult = await this.#parseOptions(action, context)
+		if (parseResult.success == false) return this.moduleCallbacks.log('error', parseResult.error)
+
+		// If options are successfully parsed...
+		this.moduleCallbacks.log(
+			'info',
+			`ACTION TRIGGERED [${action.surfaceId}]: "${action.actionId}" @ ${action.controlId}`
+		)
+		try {
+			await this.#definition.callback({
+				action: action,
+				context: context,
+				options: parseResult.options,
+			})
+		} catch (error) {
+			this.moduleCallbacks.log(
+				'error',
+				`There was an error triggering the action "${action.actionId}".  Error message: ${error}`
+			)
+		}
+	}
+
+	buildCompanionDefinition(): { actionId: string; actionDefinition: CompanionActionDefinition } {
+		return {
+			actionId: this.#definition.actionId,
+			actionDefinition: {
+				name: this.#definition.name,
+				options: this.#definition.options,
+				description: this.#definition.description,
+				callback: (action: CompanionActionEvent, context: CompanionActionContext) => this.#callback(action, context),
+				subscribe: (action: CompanionActionInfo, context: CompanionActionContext) => this.#subscribe(action, context),
+				unsubscribe: (action: CompanionActionInfo, context: CompanionActionContext) =>
+					this.#unsubscribe(action, context),
 			},
-		},
+		}
 	}
 }
