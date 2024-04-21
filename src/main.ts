@@ -28,7 +28,7 @@ import {
 } from './parameters'
 import * as sweb from './sweb'
 import UpgradeScripts from './upgrades'
-import { VariableManager } from './variableManager'
+import { VariableManager, buildParameterVariableId, createParameterVariableDefinition } from './variableManager'
 import { ModuleConnectionStatus, NodeConnectionWatchdog, NodeOnlineStatus } from './watchdog'
 
 const WATCHDOG_TIME_PARAMETER = '0.0.0.0.2' // Time
@@ -630,24 +630,31 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 		dependentType: DependentType,
 		dependentId: string
 	) {
-		let varDef = this.variableManager?.getVariableDefinition(paramAddress, unit)
-		let isNewVarDef = varDef == undefined ? true : false
+		// Build a variable ID based on supplied info/options
+		let varDefId = buildParameterVariableId(paramAddress, unit)
 
-		varDef = varDef ?? this.variableManager?.createVariableDefinition(paramAddress, unit)
+		// Determine if the variable definition already exists or not (we'll need to know this later)
+		let isNewVarDef = this.variableManager?.hasVariableDefinition(varDefId) == false
 
-		if (varDef != undefined) {
-			// Register the supplied depdendent on the variable definition
-			this.variableManager?.registerDependent(dependentType, dependentId, varDef.id)
+		// Get/create the variable definition
+		let varDef =
+			this.variableManager?.getVariableDefinitionFromId(varDefId) ??
+			createParameterVariableDefinition(paramAddress, unit)
 
-			// Register the variable definition with the parameter subscription manager so it can be made aware of parameter value changes
-			this.parameterSubscriptionManager?.registerDependent(DependentType.VARIABLE, varDef.id, paramAddress, unit)
+		// If it's a new variable definition, we need to add it to the 
+		if (isNewVarDef) this.variableManager?.addVariableDefinition(varDef)
 
-			if (isNewVarDef) {
-				// We now need to initialise the variable value.  TODO Factor out?
-				let initValue = await this.getParameterValue(paramAddress, unit, true) // Get the current raw value
-				this.variableManager?.updateModuleVariableValues([varDef.id], initValue)
-				this.log('debug', `Created new module variable definition: ${varDef.id}`)
-			}
+		// Register the supplied depdendent on the variable definition
+		this.variableManager?.registerDependent(dependentType, dependentId, varDef.id)
+
+		// Register the variable definition with the parameter subscription manager so it can be made aware of parameter value changes
+		this.parameterSubscriptionManager?.registerDependent(DependentType.VARIABLE, varDef.id, paramAddress, unit)
+
+		if (isNewVarDef) {
+			// For new variables, we need to initialise the variable value.  TODO Factor out?
+			let initValue = await this.getParameterValue(paramAddress, unit, true) // Get the current raw value
+			this.variableManager?.updateModuleVariableValues([varDef.id], initValue)
+			this.log('debug', `Created new module variable definition: ${varDef.id}`)
 		}
 	}
 

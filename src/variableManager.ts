@@ -3,12 +3,10 @@ import { DependentType } from './dependents'
 import { ParameterUnit } from './parameters'
 import * as sweb from './sweb'
 
-// TODO Some of this probably needs refinement to de-couple it from parameters so other variables can be managed.
-
 /**
  * Helper function to build a parameter variable ID
  */
-export function buildVariableId(paramAddress: sweb.ParameterAddress, unit: ParameterUnit): string {
+export function buildParameterVariableId(paramAddress: sweb.ParameterAddress, unit: ParameterUnit): string {
 	let suffix: string
 	switch (unit) {
 		case ParameterUnit.RAW:
@@ -27,28 +25,22 @@ export function buildVariableId(paramAddress: sweb.ParameterAddress, unit: Param
 }
 
 /**
- * Helper function to return the parameter address from a variable ID
- */
-export function parameterAddressFromVariableId(variableId: string) {
-	return variableId.split('-')[0]
-}
-
-/**
  * Factory for creating a Parameter Variable Definition
  */
 export function createParameterVariableDefinition(
 	paramAddress: sweb.ParameterAddress,
 	unit: ParameterUnit
 ): VariableDefinition {
+	let id = buildParameterVariableId(paramAddress, unit)
 	switch (unit) {
 		case ParameterUnit.RAW:
-			return new RawParameterVariableDefinition(paramAddress, unit)
+			return new RawParameterVariableDefinition(id)
 		case ParameterUnit.DB:
-			return new DBParameterVariableDefinition(paramAddress, unit)
+			return new DBParameterVariableDefinition(id)
 		case ParameterUnit.PERCENT:
-			return new PercentParameterVariableDefinition(paramAddress, unit)
+			return new PercentParameterVariableDefinition(id)
 		default:
-			return new RawParameterVariableDefinition(paramAddress, unit)
+			return new RawParameterVariableDefinition(id)
 	}
 }
 
@@ -58,7 +50,6 @@ export function createParameterVariableDefinition(
 export type VariableDefinition = {
 	id: string
 	name: string
-	unit: ParameterUnit
 
 	dependentsMap: Map<DependentType, Set<string>>
 
@@ -77,16 +68,14 @@ export type VariableDefinition = {
 abstract class BaseParameterVariableDefinition implements VariableDefinition {
 	id: string
 	name: string
-	unit: ParameterUnit
 
 	abstract getVariableValue(value: number): number | string
 
 	dependentsMap = new Map()
 
-	constructor(paramAddress: sweb.ParameterAddress, unit: ParameterUnit) {
-		this.unit = unit
-		this.id = buildVariableId(paramAddress, this.unit)
-		this.name = this.id
+	constructor(id: string) {
+		this.id = id
+		this.name = this.id  // Deprecate??
 	}
 
 	hasDependents(): boolean {
@@ -171,30 +160,18 @@ export class VariableManager {
 		this.moduleVariableSetter.reset()
 	}
 
-	getVariableDefinition(paramAddress: sweb.ParameterAddress, unit: ParameterUnit): VariableDefinition | undefined {
-		let variableId = buildVariableId(paramAddress, unit)
-		let variableDef = this.getVariableDefinitionFromId(variableId)
-		return variableDef
-	}
-
 	getVariableDefinitionFromId(defId: string) {
 		return this.variableDefinitionsMap.get(defId)
 	}
 
-	createVariableDefinition(paramAddress: sweb.ParameterAddress, unit: ParameterUnit) {
-		let variableId = buildVariableId(paramAddress, unit)
+	addVariableDefinition(variableDef: VariableDefinition) {
+		// If this variable definition has already been added, just return
+		if (this.getVariableDefinitionFromId(variableDef.id) != undefined) return
 
-		let possibleVariableDef = this.getVariableDefinition(paramAddress, unit)
-		if (possibleVariableDef != undefined) return possibleVariableDef // We have already added this one so just return it
-
-		let variableDef = createParameterVariableDefinition(paramAddress, unit)
-
-		this.variableDefinitionsMap.set(variableId, variableDef)
-
+		// Add the variable definition to the map
+		this.variableDefinitionsMap.set(variableDef.id, variableDef)
 		// Now update the module's variable definitions
-		this.moduleVariableSetter.addVariableDefinition({ variableId: variableId, name: variableDef.name })
-
-		return variableDef
+		this.moduleVariableSetter.addVariableDefinition({ variableId: variableDef.id, name: variableDef.name })
 	}
 
 	removeVariableDefintion(variableId: string): boolean {
@@ -204,6 +181,10 @@ export class VariableManager {
 		// Now update the module's variable definitions
 		this.moduleVariableSetter.removeVariableDefinition({ variableId: variableId, name: variableDef?.name ?? '' })
 		return res
+	}
+
+	hasVariableDefinition(varDefId: string) {
+		return this.getVariableDefinitionFromId(varDefId) != undefined
 	}
 
 	#purgeVariableDefinition(variableDef: VariableDefinition) {
@@ -224,11 +205,6 @@ export class VariableManager {
 		})
 		// Now update the module's variable values using the setter
 		this.moduleVariableSetter.setVariableValues(updatedVariableValues)
-	}
-
-	// Deprecate?  Same as addVariableDefinition
-	getOrCreateVariableDefinition(paramAddress: sweb.ParameterAddress, unit: ParameterUnit) {
-		return this.getVariableDefinition(paramAddress, unit) ?? this.createVariableDefinition(paramAddress, unit)
 	}
 
 	#addVariableRegistration(type: DependentType, typeId: string, variableDef: VariableDefinition) {
