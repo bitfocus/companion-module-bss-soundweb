@@ -1,4 +1,4 @@
-import { Regex, combineRgb } from '@companion-module/base'
+import { InputValue, Regex, combineRgb } from '@companion-module/base'
 import { ModuleFeedbackCallbacks, SoundwebFeedbackDefinition } from '../feedbacks'
 import {
 	ComparisonOptionValues,
@@ -9,17 +9,21 @@ import {
 	parseEnumInput,
 	parseNumberInput,
 	parseParameterAddressFromFQAddress,
+	parseStringInput,
 	unitOptionField,
+	variableTagOptionField,
+	variableTagRegExp,
 } from '../options'
 import { ParameterUnit } from '../parameters'
 import { ParameterAddress } from '../sweb'
 
 type OptionInputs = {
-	fqParamAddress: string
+	fqParamAddress: InputValue
 	comparisonOperator: string
-	value: string
+	value: InputValue
 	unit: ParameterUnit
 	createVariable: boolean
+	variableTag: InputValue
 }
 
 type ParsedOptionValues = {
@@ -28,6 +32,7 @@ type ParsedOptionValues = {
 	value: number
 	unit: ParameterUnit
 	createVariable: boolean
+	variableTag?: string
 }
 
 export default function (
@@ -56,6 +61,7 @@ export default function (
 			},
 			unitOptionField(),
 			createVariableOptionField(),
+			variableTagOptionField(),
 		],
 
 		parseOptions: async ({ feedback, context }) => {
@@ -64,6 +70,10 @@ export default function (
 			let comparisonOperator = parseEnumInput(feedback.options.comparisonOperator, ComparisonOptionValues)
 			let unit = parseEnumInput(feedback.options.unit, ParameterUnit)
 			let createVariable = parseCheckboxInput(feedback.options.createVariable)
+			let variableTag = await parseStringInput(feedback.options.variableTag, {
+				regex: new RegExp(variableTagRegExp),
+				required: false,
+			})
 
 			return {
 				fqParamAddress: paramAddress,
@@ -71,6 +81,7 @@ export default function (
 				value: value,
 				unit: unit,
 				createVariable: createVariable,
+				variableTag: variableTag,
 			}
 		},
 
@@ -78,7 +89,7 @@ export default function (
 			let { fqParamAddress, value, unit, comparisonOperator, createVariable } = options
 
 			// We need to subscribe the feedback here to support variables that may have been updated in options
-			await moduleCallbacks.subscribe(feedback, fqParamAddress, unit, createVariable)
+			await moduleCallbacks.subscribe(feedback, fqParamAddress, unit, createVariable, options.variableTag)
 
 			// Get the current state of the parameter
 			let currentState = await moduleCallbacks.getParameterValue(fqParamAddress, unit)
@@ -107,7 +118,7 @@ export default function (
 
 		subscribe: async ({ feedback, options }) => {
 			let { fqParamAddress, unit, createVariable } = options
-			await moduleCallbacks.subscribe(feedback, fqParamAddress, unit, createVariable)
+			await moduleCallbacks.subscribe(feedback, fqParamAddress, unit, createVariable, options.variableTag)
 		},
 
 		unsubscribe: async ({ feedback }) => {

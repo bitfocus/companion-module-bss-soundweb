@@ -14,7 +14,6 @@ export const PARAM_REGEXP = `${DECIMAL_VALUE_REGEXP}|${HEX_VALUE_REGEXP}|${VARIA
 export const FQ_PARAM_ADDR_REGEXP = `^(((${NODE_REGEXP})\\.(${VD_REGEXP})\\.(${OBJ_REGEXP}))|${HEX_VALUE_REGEXP})\\.(${PARAM_REGEXP})$`
 export const FQ_OBJ_ADDR_REGEXP = `^((${NODE_REGEXP})\\.(${VD_REGEXP})\\.(${OBJ_REGEXP}))|${HEX_VALUE_REGEXP}$`
 
-
 export class TimeoutError extends Error {
 	constructor(errMsg: string) {
 		super(errMsg)

@@ -4,9 +4,13 @@ import { ParameterUnit } from './parameters'
 import * as sweb from './sweb'
 
 /**
- * Helper function to build a parameter variable ID
+ * Helper function to create a parameter variable ID
  */
-export function buildParameterVariableId(paramAddress: sweb.ParameterAddress, unit: ParameterUnit): string {
+export function buildParameterVariableId(
+	paramAddress: sweb.ParameterAddress,
+	unit: ParameterUnit,
+	variableTag: string
+): string {
 	let suffix: string
 	switch (unit) {
 		case ParameterUnit.RAW:
@@ -16,12 +20,13 @@ export function buildParameterVariableId(paramAddress: sweb.ParameterAddress, un
 			suffix = '-DB'
 			break
 		case ParameterUnit.PERCENT:
-			suffix = '-PERCENT'
+			suffix = '-PCT'
 			break
 		default:
 			suffix = '-RAW'
 	}
-	return `${paramAddress.toString()}${suffix}`
+	let tag = variableTag.length > 0 ? variableTag + '_' : ''
+	return `param_${tag}${paramAddress.toString()}${suffix}`
 }
 
 /**
@@ -29,18 +34,22 @@ export function buildParameterVariableId(paramAddress: sweb.ParameterAddress, un
  */
 export function createParameterVariableDefinition(
 	paramAddress: sweb.ParameterAddress,
-	unit: ParameterUnit
+	unit: ParameterUnit,
+	variableTag: string
 ): VariableDefinition {
-	let id = buildParameterVariableId(paramAddress, unit)
+	let id = buildParameterVariableId(paramAddress, unit, variableTag)
+	let formattedTag = variableTag ? `[${variableTag}] ` : ''
+	const buildName = (paramAddress: sweb.ParameterAddress, unit: ParameterUnit) =>
+		`Parameter: ${formattedTag}${paramAddress.toString()} (${ParameterUnit[unit]})`
 	switch (unit) {
 		case ParameterUnit.RAW:
-			return new RawParameterVariableDefinition(id)
+			return new RawParameterVariableDefinition(id, buildName(paramAddress, unit))
 		case ParameterUnit.DB:
-			return new DBParameterVariableDefinition(id)
+			return new DBParameterVariableDefinition(id, buildName(paramAddress, unit))
 		case ParameterUnit.PERCENT:
-			return new PercentParameterVariableDefinition(id)
+			return new PercentParameterVariableDefinition(id, buildName(paramAddress, unit))
 		default:
-			return new RawParameterVariableDefinition(id)
+			return new RawParameterVariableDefinition(id, buildName(paramAddress, unit))
 	}
 }
 
@@ -63,7 +72,7 @@ export type VariableDefinition = {
 }
 
 /**
- * Abstract base class for a variable defintion
+ * Abstract base class for a Parameter Variable Defintion
  */
 abstract class BaseParameterVariableDefinition implements VariableDefinition {
 	id: string
@@ -73,9 +82,9 @@ abstract class BaseParameterVariableDefinition implements VariableDefinition {
 
 	dependentsMap = new Map()
 
-	constructor(id: string) {
+	constructor(id: string, name?: string) {
 		this.id = id
-		this.name = this.id  // Deprecate??
+		this.name = name ?? this.id
 	}
 
 	hasDependents(): boolean {
@@ -136,7 +145,7 @@ export class PercentParameterVariableDefinition extends BaseParameterVariableDef
 type VariableDependentsMap = Map<DependentType, Map<string, Set<string>>>
 
 /**
- * A manager for coordinating module variable definitions and their dependents
+ * A manager for coordinating module variable definitions and keeping track of their dependents
  */
 export class VariableManager {
 	variableDefinitionsMap: Map<string, VariableDefinition> = new Map() // Map of variableIds to definitions

@@ -405,8 +405,9 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 				feedback: CompanionFeedbackInfo,
 				paramAddress: sweb.ParameterAddress,
 				unit: ParameterUnit,
-				createVariable?: boolean
-			) => await this.subscribeFeedback(feedback, paramAddress, unit, createVariable),
+				createVariable?: boolean,
+				variableTag?: string
+			) => await this.subscribeFeedback(feedback, paramAddress, unit, createVariable, variableTag),
 			unsubscribe: async (feedback: CompanionFeedbackInfo) => await this.unsubscribeFeedback(feedback),
 			getParameterValue: async (paramAddress: sweb.ParameterAddress, unit: ParameterUnit) =>
 				await this.getParameterValue(paramAddress, unit),
@@ -628,10 +629,11 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 		paramAddress: sweb.ParameterAddress,
 		unit: ParameterUnit,
 		dependentType: DependentType,
-		dependentId: string
+		dependentId: string,
+		variableTag: string
 	) {
 		// Build a variable ID based on supplied info/options
-		let varDefId = buildParameterVariableId(paramAddress, unit)
+		let varDefId = buildParameterVariableId(paramAddress, unit, variableTag)
 
 		// Determine if the variable definition already exists or not (we'll need to know this later)
 		let isNewVarDef = this.variableManager?.hasVariableDefinition(varDefId) == false
@@ -639,7 +641,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 		// Get/create the variable definition
 		let varDef =
 			this.variableManager?.getVariableDefinitionFromId(varDefId) ??
-			createParameterVariableDefinition(paramAddress, unit)
+			createParameterVariableDefinition(paramAddress, unit, variableTag)
 
 		// If it's a new variable definition, we need to add it to the 
 		if (isNewVarDef) this.variableManager?.addVariableDefinition(varDef)
@@ -701,7 +703,8 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 		feedback: CompanionFeedbackInfo,
 		paramAddress: sweb.ParameterAddress,
 		unit: ParameterUnit,
-		createVariable: boolean = false
+		createVariable: boolean = false,
+		variableTag: string = ''
 	) {
 		this.log('debug', `Subscribing feedback: '${feedback.feedbackId}' @ ${feedback.controlId} (${feedback.id})`)
 		if (this.variableManager == undefined || this.parameterSubscriptionManager == undefined)
@@ -713,7 +716,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 
 		// If we have been asked to create a variable, do it and make all the necessary connections
 		if (createVariable) {
-			this.#createVariableDefinitionAndRegisterDependent(paramAddress, unit, DependentType.FEEDBACK, feedback.id)
+			this.#createVariableDefinitionAndRegisterDependent(paramAddress, unit, DependentType.FEEDBACK, feedback.id, variableTag)
 		}
 		this.connectionWatchdog?.addNodeDependency(paramAddress.node, feedback.id)
 	}

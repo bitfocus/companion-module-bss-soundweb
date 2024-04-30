@@ -7,7 +7,7 @@ import {
 	CompanionOptionValues,
 	InputValue,
 } from '@companion-module/base'
-import { EnumLike, ZodError, z } from 'zod'
+import { EnumLike, ZodError, ZodSchema, z } from 'zod'
 import { ParameterUnit } from './parameters'
 import { ParameterAddress, ParameterAddressParsingError } from './sweb'
 import { FQ_OBJ_ADDR_REGEXP, FQ_PARAM_ADDR_REGEXP, VARIABLE_REGEXP, getRegexRange } from './utils'
@@ -33,15 +33,16 @@ export type FQParameterAddressOptionField = CompanionInputFieldTextInput & {
 	id: 'fqParamAddress'
 }
 
-export function fQParameterAddressOptionField(): FQParameterAddressOptionField {
+export function fQParameterAddressOptionField(required = true): FQParameterAddressOptionField {
 	return {
 		id: 'fqParamAddress',
 		type: 'textinput',
 		label: 'Fully qualified parameter address',
 		tooltip:
-			"Provide the fully qualified (complete) address of the 'parameter' within your design that you wish to interact with.  This must be in one of the documented/compatible formats.  See this module's 'help' page for more information.",
+			"Provide the fully qualified (complete) address of the 'parameter' within your design that you wish to interact with.  This must be in one of the documented/compatible formats.  See this module's help page for more information.",
 		default: '0.3.0.0.0.0',
 		regex: `/${FQ_PARAM_ADDR_REGEXP}/`,
+		required: required,
 		useVariables: true,
 	}
 }
@@ -50,15 +51,16 @@ export type FQObjectAddressOptionField = CompanionInputFieldTextInput & {
 	id: 'fqObjectAddress'
 }
 
-export function fQObjectAddressOptionField(): FQObjectAddressOptionField {
+export function fQObjectAddressOptionField(required = true): FQObjectAddressOptionField {
 	return {
 		id: 'fqObjectAddress',
 		type: 'textinput',
 		label: 'Fully qualified object address',
 		tooltip:
-			"Provide the fully qualified (complete) address of the 'object' within your design that you wish to interact with.  This must be in one of the documented/compatible formats.  See this module's 'help' page for more information.",
+			"Provide the fully qualified (complete) address of the 'object' within your design that you wish to interact with.  This must be in one of the documented/compatible formats.  See this module's help page for more information.",
 		default: '0.3.0.0.0',
 		regex: `/${FQ_OBJ_ADDR_REGEXP}/`,
+		required: required,
 		useVariables: true,
 	}
 }
@@ -166,8 +168,34 @@ export function createVariableOptionField(): CreateVariableOptionField {
 	return {
 		id: 'createVariable',
 		type: 'checkbox',
-		label: 'Create variable?',
+		label: 'Create parameter variable?',
+		tooltip:
+			"Create a module variable that can be used throughout Companion to access the parameter's value." +
+			"\n\ne.g. to display the current level of a gain in a button's text.",
 		default: false,
+	}
+}
+
+export type VariableTagOptionField = CompanionInputFieldTextInput & {
+	id: 'variableTag'
+}
+
+export const variableTagRegExp = '^[a-zA-Z0-9]{0,20}$'
+
+export function variableTagOptionField(): VariableTagOptionField {
+	return {
+		id: 'variableTag',
+		type: 'textinput',
+		label: 'Variable tag (ID)',
+		tooltip:
+			'Optional user-provided tag/ID to help identify this variable in the list of module variables.' +
+			'\n\nMax 20 alphanumeric characters are permitted (no spaces or special characters can be used).',
+		regex: `/${variableTagRegExp}/`,
+		default: '',
+		required: false,
+		isVisible: (options: { createVariable: boolean } | CompanionOptionValues) => {
+			return options.createVariable == undefined ? true : options.createVariable == true
+		},
 	}
 }
 
@@ -269,14 +297,31 @@ export async function parseParameterAddressFromFQAddress(
 }
 
 export async function parseStringInput(
-	context: CompanionActionContext | CompanionFeedbackContext,
-	input: InputValue | undefined
-): Promise<string> {
-	if (input == undefined) throw new ParsingError('Input is undefined')
+	input: InputValue | undefined,
+	opts?: {
+		regex?: RegExp
+		required: boolean
+		context?: CompanionActionContext | CompanionFeedbackContext
+	}
+): Promise<string | undefined> {
+	let required = opts?.required ?? true
+	let regex = opts?.regex
+
+	let stringSchema: ZodSchema = regex
+		? z.coerce.string().trim().regex(regex, 'Input did not match required format.')
+		: z.coerce.string().trim()
+
+	stringSchema = required == false ? stringSchema.optional() : stringSchema
+
 	try {
-		let inputStr = z.coerce.string().parse(input)
-		let parsedString = await context.parseVariablesInString(inputStr)
-		return parsedString
+		let inputString = stringSchema.parse(input)
+
+		// If context has been provided, parse any variables that have been referenced and return
+		if (opts?.context && inputString) {
+			return await opts.context.parseVariablesInString(inputString)
+		} else {
+			return inputString
+		}
 	} catch (err) {
 		throw new ParsingError(getErrorMessage(err))
 	}

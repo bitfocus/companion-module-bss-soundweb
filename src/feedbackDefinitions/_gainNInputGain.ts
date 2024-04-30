@@ -1,4 +1,4 @@
-import { combineRgb } from '@companion-module/base'
+import { InputValue, combineRgb } from '@companion-module/base'
 import { ModuleFeedbackCallbacks, SoundwebFeedbackDefinition } from '../feedbacks'
 import {
 	ComparisonOptionValues,
@@ -10,18 +10,22 @@ import {
 	parseEnumInput,
 	parseNumberInput,
 	parseParameterAddressFromFQAddress,
+	parseStringInput,
 	unitOptionField,
+	variableTagOptionField,
+	variableTagRegExp,
 } from '../options'
 import { ParameterUnit } from '../parameters'
 import { ParameterAddress } from '../sweb'
 
 type OptionInputs = {
-	fqObjectAddress: string
+	fqObjectAddress: InputValue
 	channel: number
-	value: string
+	value: InputValue
 	comparisonOperator: string
 	unit: ParameterUnit
 	createVariable: boolean
+	variableTag: InputValue
 }
 
 type ParsedOptionValues = {
@@ -30,6 +34,7 @@ type ParsedOptionValues = {
 	comparisonOperator: ComparisonOptionValues
 	unit: ParameterUnit
 	createVariable: boolean
+	variableTag?: string
 }
 
 export default function (
@@ -57,6 +62,7 @@ export default function (
 			},
 			unitOptionField(ParameterUnit.DB, [ParameterUnit.DB, ParameterUnit.PERCENT]),
 			createVariableOptionField(),
+			variableTagOptionField(),
 		],
 
 		parseOptions: async ({ feedback, context }) => {
@@ -69,6 +75,10 @@ export default function (
 			let comparisonOperator = parseEnumInput(feedback.options.comparisonOperator, ComparisonOptionValues)
 			let unit = parseEnumInput(feedback.options.unit, ParameterUnit)
 			let createVariable = parseCheckboxInput(feedback.options.createVariable)
+			let variableTag = await parseStringInput(feedback.options.variableTag, {
+				regex: new RegExp(variableTagRegExp),
+				required: false,
+			})
 
 			return {
 				fqParamAddress: paramAddress,
@@ -76,6 +86,7 @@ export default function (
 				value: value,
 				unit: unit,
 				createVariable: createVariable,
+				variableTag: variableTag,
 			}
 		},
 
@@ -83,16 +94,14 @@ export default function (
 			let { fqParamAddress, value, unit, comparisonOperator, createVariable } = options
 
 			// We need to subscribe the feedback here to support variables that may have been updated in options
-			await moduleCallbacks.subscribe(feedback, fqParamAddress, unit, createVariable)
+			await moduleCallbacks.subscribe(feedback, fqParamAddress, unit, createVariable, options.variableTag)
 
 			// Get the current gain value
 			let currentState = await moduleCallbacks.getParameterValue(fqParamAddress, unit)
 
-			// Check that we are not dealing 
+			// Check that we are not dealing
 			if (typeof currentState != 'number') {
-
 				return false
-
 			}
 			switch (comparisonOperator) {
 				case ComparisonOptionValues.LESS_THAN:
@@ -114,7 +123,7 @@ export default function (
 
 		subscribe: async ({ feedback, options }) => {
 			let { fqParamAddress, unit, createVariable } = options
-			await moduleCallbacks.subscribe(feedback, fqParamAddress, unit, createVariable)
+			await moduleCallbacks.subscribe(feedback, fqParamAddress, unit, createVariable, options.variableTag)
 		},
 
 		unsubscribe: async ({ feedback }) => {

@@ -46,7 +46,8 @@ export type ModuleFeedbackCallbacks = {
 		feedback: CompanionFeedbackInfo,
 		paramAddress: ParameterAddress,
 		unit: ParameterUnit,
-		createVariable?: boolean
+		createVariable?: boolean,
+		variableTag?: string
 	) => Promise<void>
 	unsubscribe: (feedback: CompanionFeedbackInfo) => Promise<void>
 	getParameterValue: (
