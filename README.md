@@ -3,12 +3,14 @@
 See [HELP.md](./companion/HELP.md) and [LICENSE](./LICENSE)
 
 This module enables Companion to control BSS Soundweb London BLU devices such as:
-* Soundweb BLU-806
-* Soundweb BLU-160
+
+- Soundweb BLU-806
+- Soundweb BLU-160
 
 The module is only compatible with Companion v3 and will be maintained from Companion `v3.2.0` onwards.
 
 ## Feature Roadmap
+
 - [x] Custom parameter action
   - [x] Absolute set
   - [x] Relative set
@@ -33,9 +35,10 @@ The module is only compatible with Companion v3 and will be maintained from Comp
   - [ ] Gain Fade
 
 ## Pre-release checklist
+
 - [x] Write a basic HELP.md
 - [x] Run Companion tools bundler
-- [ ] Set initial version
+- [x] Set initial version
 
 # Development
 
@@ -92,6 +95,7 @@ Add the following to your `.bashrc` or `.zshrc` profile:
 ```bash
 eval "$(fnm env --use-on-cd)"
 ```
+
 The `.bashrc` or `.zshrc` file can typically be found in your home directory.
 
 ## Build
@@ -129,10 +133,33 @@ yarn dev
 ```
 
 ## Run the module in Companion
-To run the module in Companion, you need to provide Companion a path to a directory containing your development modules.  This can be done from the desktop server application window.  Click the gear icon and a 'Developer Modules Path' field appears, where you can set the path.
+
+To run the module in Companion, you need to provide Companion a path to a directory containing your development modules. This can be done from the desktop server application window. Click the gear icon and a 'Developer Modules Path' field appears, where you can set the path.
 
 Once this has been done, Companion will watch the files in your development path and will 'live reload' any modules whose files have been changed.
 
-Companion imports/runs the file identified in [mainfest.json](companion/manifest.json) under `runtime.entrypoint`.  This should be the transpiled (.js) version of [main.ts](src/main.ts), which will appear at: `dist/main.js`, but only once the project has been built using `yarn build` or `yarn dev`.
+Companion imports/runs the file identified in [mainfest.json](companion/manifest.json) under `runtime.entrypoint`. This should be the transpiled (.js) version of [main.ts](src/main.ts), which will appear at: `dist/main.js`, but only once the project has been built using `yarn build` or `yarn dev`.
 
-Once you have built the project, you can run `yarn dev` as detailed above, which will then watch your source code and auto-transpile typescript to javascript as you work.  In turn, Companion will then live reload any edited development modules automatically.
+Once you have built the project, you can run `yarn dev` as detailed above, which will then watch your source code and auto-transpile typescript to javascript as you work. In turn, Companion will then live reload any edited development modules automatically.
+
+## Version bumping
+### Releases
+`yarn version --major`
+
+`yarn version --minor`
+
+`yarn version --patch`
+
+### Pre-releases
+`yarn version --premajor --preid rc`
+
+`yarn version --preminor --preid rc`
+
+`yarn version --prepatch --preid rc`
+
+### Betas
+`yarn version --premajor --preid beta`
+
+`yarn version --preminor --preid beta`
+
+`yarn version --prepatch --preid beta`
