@@ -7,7 +7,11 @@ This module enables Companion to control BSS Soundweb London BLU devices such as
 - Soundweb BLU-806
 - Soundweb BLU-160
 
-The module is only compatible with Companion v3 and will be maintained from Companion `v3.2.0` onwards.
+This module is only compatible with Companion v3 and will be available in Companion from `v3.3.0`.
+
+## Releases
+### v1.0.0
+This is the first release of the module and is compatible with Companion `v3.3.0` and later.
 
 ## Feature Roadmap
 

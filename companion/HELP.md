@@ -7,7 +7,7 @@ This module allows Companion to control BSS Soundweb London devices using the Di
 
 In theory, it should work on any Soundweb London device, providing it supports the [London Direct Inject Protocol](https://help.harmanpro.com/soundweb-london-third-party-control).
 
-This module is only compatible with Companion v3 and will be maintained from Companion `v3.2.0` onwards.
+This module is only compatible with Companion v3 and will be available in Companion from `v3.3.0`.
 
 ## Getting Started
 
