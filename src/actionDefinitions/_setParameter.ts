@@ -74,12 +74,14 @@ export default function (
 			// Now set the parameter value
 			await moduleCallbacks.setParameterValue(paramAddress, setType, value, unit)
 		},
-		// subscribe: async ({ action, options }) => {
-		// 	let { paramAddress, unit } = options
-		// 	await moduleCallbacks.subscribe(action, paramAddress, unit)
-		// },
-		// unsubscribe: async ({ action }) => {
-		// 	await moduleCallbacks.unsubscribe(action)
-		// },
+
+		// We must subscribe/unsubscribe so connection watchdog can do its thing
+		subscribe: async ({ action, options }) => {
+			let { paramAddress, unit } = options
+			await moduleCallbacks.subscribe(action, paramAddress, unit)
+		},
+		unsubscribe: async ({ action }) => {
+			await moduleCallbacks.unsubscribe(action)
+		},
 	}
 }

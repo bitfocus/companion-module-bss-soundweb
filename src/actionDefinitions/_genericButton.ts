@@ -54,13 +54,14 @@ export default function (
 			}
 		},
 
-		// subscribe: async ({ action, options }) => {
-		// 	let { paramAddress } = options
-		// 	await moduleCallbacks.subscribe(action, paramAddress, ParameterUnit.RAW)
-		// },
+		// We must subscribe/unsubscribe so connection watchdog can do its thing
+		subscribe: async ({ action, options }) => {
+			let { paramAddress } = options
+			await moduleCallbacks.subscribe(action, paramAddress, ParameterUnit.RAW)
+		},
 
-		// unsubscribe: async ({ action }) => {
-		// 	await moduleCallbacks.unsubscribe(action)
-		// },
+		unsubscribe: async ({ action }) => {
+			await moduleCallbacks.unsubscribe(action)
+		},
 	}
 }

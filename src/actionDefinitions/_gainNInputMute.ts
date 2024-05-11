@@ -37,28 +37,27 @@ export default function (
 			}),
 		],
 
-		parseOptions: async ({ action, context }) =>
-			{
-				let channelParam = (await parseNumberInput(context, action.options.channel)) - 1
-				let muteParam = channelParam + 32
-				let paramAddress = await parseParameterAddressFromFQAddress(
-					context,
-					`${action.options.fqObjectAddress}.${muteParam}`
-				)
-				let buttonValue = validateButtonInput(action.options.buttonValue)
+		parseOptions: async ({ action, context }) => {
+			let channelParam = (await parseNumberInput(context, action.options.channel)) - 1
+			let muteParam = channelParam + 32
+			let paramAddress = await parseParameterAddressFromFQAddress(
+				context,
+				`${action.options.fqObjectAddress}.${muteParam}`
+			)
+			let buttonValue = validateButtonInput(action.options.buttonValue)
 
-				return {
-					paramAddress: paramAddress,
-					buttonValue: buttonValue,
-				}
-			},
+			return {
+				paramAddress: paramAddress,
+				buttonValue: buttonValue,
+			}
+		},
 
 		callback: async ({ options }) => {
 			let { paramAddress, buttonValue } = options
 
 			// // We must subscribe here incase a variable has changed in the object address
 			// await moduleCallbacks.subscribe(action, paramAddress, ParameterUnit.RAW)
-			
+
 			// Now either set a mute value or toggle it
 			if (buttonValue == 'TOGGLE') {
 				await moduleCallbacks.setToggle(paramAddress, ParameterUnit.RAW)
@@ -67,13 +66,14 @@ export default function (
 			}
 		},
 
-		// subscribe: async ({ action, options }) => {
-		// 	let { paramAddress } = options
-		// 	await moduleCallbacks.subscribe(action, paramAddress, ParameterUnit.RAW)
-		// },
+		// We must subscribe/unsubscribe so connection watchdog can do its thing
+		subscribe: async ({ action, options }) => {
+			let { paramAddress } = options
+			await moduleCallbacks.subscribe(action, paramAddress, ParameterUnit.RAW)
+		},
 
-		// unsubscribe: async ({ action }) => {
-		// 	await moduleCallbacks.unsubscribe(action)
-		// },
+		unsubscribe: async ({ action }) => {
+			await moduleCallbacks.unsubscribe(action)
+		},
 	}
 }

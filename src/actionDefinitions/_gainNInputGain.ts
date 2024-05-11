@@ -52,31 +52,30 @@ export default function (
 			setTypeOptionField(ParameterSetType.ABSOLUTE, [ParameterSetType.ABSOLUTE, ParameterSetType.RELATIVE]),
 		],
 
-		parseOptions: async ({ action, context }) =>
-			{
-				let channelParam = (await parseNumberInput(context, action.options.channel)) - 1
-				let paramAddress = await parseParameterAddressFromFQAddress(
-					context,
-					`${action.options.fqObjectAddress}.${channelParam}`
-				)
-				let setType = parseEnumInput(action.options.setType, ParameterSetType)
-				let unit = parseEnumInput(action.options.unit, ParameterUnit)
-				let value
+		parseOptions: async ({ action, context }) => {
+			let channelParam = (await parseNumberInput(context, action.options.channel)) - 1
+			let paramAddress = await parseParameterAddressFromFQAddress(
+				context,
+				`${action.options.fqObjectAddress}.${channelParam}`
+			)
+			let setType = parseEnumInput(action.options.setType, ParameterSetType)
+			let unit = parseEnumInput(action.options.unit, ParameterUnit)
+			let value
 
-				switch (unit) {
-					case ParameterUnit.DB:
-						value = await parseDbInput(context, action.options.value)
-						break
-					default:
-						value = await parseNumberInput(context, action.options.value)
-				}
-				return {
-					paramAddress: paramAddress,
-					setType: setType,
-					unit: unit,
-					value: value,
-				}
-			},
+			switch (unit) {
+				case ParameterUnit.DB:
+					value = await parseDbInput(context, action.options.value)
+					break
+				default:
+					value = await parseNumberInput(context, action.options.value)
+			}
+			return {
+				paramAddress: paramAddress,
+				setType: setType,
+				unit: unit,
+				value: value,
+			}
+		},
 
 		callback: async ({ options }) => {
 			let { paramAddress, value, setType, unit } = options
@@ -88,13 +87,15 @@ export default function (
 			await moduleCallbacks.setParameterValue(paramAddress, setType, value, unit)
 		},
 
-		// subscribe: async ({ action, options }) => {
-		// 	let { paramAddress, unit } = options
-		// 	await moduleCallbacks.subscribe(action, paramAddress, unit)
-		// },
+		// TODO provide separate subscribe methods for parameters and just informing the module of a new action
+		// For now, we must subscribe/unsubscribe so the connection watchdog can do its thing.
+		subscribe: async ({ action, options }) => {
+			let { paramAddress, unit } = options
+			await moduleCallbacks.subscribe(action, paramAddress, unit)
+		},
 
-		// unsubscribe: async ({ action }) => {
-		// 	await moduleCallbacks.unsubscribe(action)
-		// },
+		unsubscribe: async ({ action }) => {
+			await moduleCallbacks.unsubscribe(action)
+		},
 	}
 }

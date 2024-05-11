@@ -164,6 +164,8 @@ export class NodeConnectionWatchdog {
 	}
 
 	addNode(nodeAddress: number) {
+		// console.log(`Attempting to add node ${nodeAddress}`)
+		// console.log('Nodes:',[...this.nodePollerMap.keys()])
 		if (!this.nodePollerMap.has(nodeAddress)) {
 			// console.log(`ADDING NODE ${nodeAddress}`)
 			let poller = new NodePoller(nodeAddress, () => this.#heartBeatCb(nodeAddress), this.options)
@@ -179,10 +181,16 @@ export class NodeConnectionWatchdog {
 			})
 			poller.start()
 		}
+		// console.log('Nodes:',[...this.nodePollerMap.keys()])
 	}
 
 	removeNode(nodeAddress: number) {
-		this.nodePollerMap.get(nodeAddress)?.destroy()
+		// console.log(`REMOVING NODE ${nodeAddress}`)
+		let poller = this.nodePollerMap.get(nodeAddress)
+		if (poller) {
+			poller.destroy()
+			this.nodePollerMap.delete(nodeAddress)
+		}
 	}
 
 	addNodeDependency(node: number, dependentId: string) {
