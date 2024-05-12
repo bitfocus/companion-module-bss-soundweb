@@ -44,7 +44,7 @@ function buildSwebMsgLogEntry(
 	message: { msg_type: number; address: sweb.ParameterAddress; data?: number | string }
 ) {
 	// Log the parsed command
-	let logMsg = `[${topic}] Msg Type: ${sweb.MessageType[message.msg_type]}, Parameter: ${message.address.toString()}`
+	let logMsg = `[${topic.toUpperCase()}] Msg Type: ${sweb.MessageType[message.msg_type]}, Parameter: ${message.address.toString()}`
 	if (!(message.data == undefined)) {
 		logMsg = `${logMsg}, Data: ${message.data}`
 	}
@@ -200,7 +200,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 		// Handle a node coming online and going offline
 		this.connectionWatchdog.events.on('nodeOnlineStatus', ({ node, onlineStatus }) => {
 			if (onlineStatus == NodeOnlineStatus.ONLINE) {
-				this.log('info', `Node ${node} has come online.  Resynchronising device parameters...`)
+				this.log('info', `Node ${node} is now online.  Resynchronising device parameters...`)
 				this.parameterSubscriptionManager?.subscribeNodeParameters(node)
 			} else {
 				this.log('error', `Node ${node} has gone offline.`)
@@ -676,7 +676,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 	 * Let the module know when an action has been created/edited
 	 */
 	async subscribeAction(action: CompanionActionInfo, paramAddress: sweb.ParameterAddress, unit: ParameterUnit) {
-		this.log('debug', `Subscribing action: '${action.actionId} @ ${action.controlId}' (${action.id})`)
+		// this.log('debug', `Subscribing action: '${action.actionId} @ ${action.controlId}' (${action.id})`)
 		if (this.parameterSubscriptionManager == undefined)
 			throw Error('Cannot subscribe to action because the module is not fully initialised')
 
@@ -688,7 +688,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 	 * Let the module know that an action has been deleted or the options have changed
 	 */
 	async unsubscribeAction(action: CompanionActionInfo) {
-		this.log('debug', `Unsubscribing action: '${action.actionId}' @ ${action.controlId} (${action.id})`)
+		// this.log('debug', `Unsubscribing action: '${action.actionId}' @ ${action.controlId} (${action.id})`)
 
 		this.parameterSubscriptionManager?.deregisterDependent(DependentType.ACTION, action.id)
 
@@ -706,7 +706,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 		createVariable: boolean = false,
 		variableTag: string = ''
 	) {
-		this.log('debug', `Subscribing feedback: '${feedback.feedbackId}' @ ${feedback.controlId} (${feedback.id})`)
+		// this.log('debug', `Subscribing feedback: '${feedback.feedbackId}' @ ${feedback.controlId} (${feedback.id})`)
 		if (this.variableManager == undefined || this.parameterSubscriptionManager == undefined)
 			throw Error('Cannot subscribe to feedback because the module is not fully initialised')
 
@@ -725,7 +725,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 	 * Let the module know when an feedback has been deleted or edited
 	 */
 	async unsubscribeFeedback(feedback: CompanionFeedbackInfo) {
-		this.log('debug', `Unsubscribing feedback: '${feedback.feedbackId}' @ ${feedback.controlId} (${feedback.id})`)
+		// this.log('debug', `Unsubscribing feedback: '${feedback.feedbackId}' @ ${feedback.controlId} (${feedback.id})`)
 
 		this.parameterSubscriptionManager?.deregisterDependent(DependentType.FEEDBACK, feedback.id)
 

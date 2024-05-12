@@ -8,6 +8,7 @@ import {
 	LogLevel,
 	SomeCompanionActionInputField,
 } from '@companion-module/base'
+import { buttonLocationLogString } from './logging'
 import { OptionsParsingResult, ParameterSetType, ParsedOptionValues, ParsingError } from './options'
 import { ParameterUnit } from './parameters'
 import { ParameterAddress } from './sweb'
@@ -171,12 +172,18 @@ class SoundwebActionDefinitionProvider<
 			if (err instanceof ParsingError) {
 				return {
 					success: false,
-					error: `Error parsing options for action "${action.actionId}" @ ${action.controlId} (${action.id}): ${err.message}`,
+					error: `Error parsing options for action '${action.actionId}' @ ${await buttonLocationLogString(
+						action,
+						context
+					)}: ${err.message}`,
 				}
 			} else {
 				return {
 					success: false,
-					error: `Unknown error while parsing options for action "${action.actionId}" @ ${action.controlId} (${action.id})`,
+					error: `Unknown error while parsing options for action '${action.actionId}' @ ${await buttonLocationLogString(
+						action,
+						context
+					)}`,
 				}
 			}
 		}
@@ -186,7 +193,13 @@ class SoundwebActionDefinitionProvider<
 		if (this.#definition.subscribe == undefined) return
 		let parseResult = await this.#parseOptions(action, context)
 		if (parseResult.success == false) return this.moduleCallbacks.log('error', parseResult.error)
-		this.moduleCallbacks.log('debug', `ACTION SUBSCRIBED: "${action.actionId}" @ ${action.controlId} (${action.id})`)
+
+		let location = await buttonLocationLogString(action, context)
+		this.moduleCallbacks.log(
+			'debug',
+			`[ACTION SUBSCRIBING] '${action.actionId}' @ ${(location = '' ? action.controlId : location)}`
+		)
+
 		await this.#definition.subscribe({
 			action: action,
 			context: context,
@@ -198,7 +211,13 @@ class SoundwebActionDefinitionProvider<
 		if (this.#definition.unsubscribe == undefined) return
 		let parseResult = await this.#parseOptions(action, context)
 		if (parseResult.success == false) return this.moduleCallbacks.log('error', parseResult.error)
-		this.moduleCallbacks.log('debug', `ACTION UNSUBSCRIBED: "${action.actionId}" @ ${action.controlId}`)
+
+		let location = await buttonLocationLogString(action, context)
+		this.moduleCallbacks.log(
+			'debug',
+			`[ACTION UNSUBSCRIBING] '${action.actionId}' @ ${(location = '' ? action.controlId : location)}`
+		)
+
 		await this.#definition.unsubscribe({
 			action: action,
 			context: context,
@@ -210,11 +229,12 @@ class SoundwebActionDefinitionProvider<
 		let parseResult = await this.#parseOptions(action, context)
 		if (parseResult.success == false) return this.moduleCallbacks.log('error', parseResult.error)
 
-		// If options are successfully parsed...
-		this.moduleCallbacks.log(
-			'info',
-			`ACTION TRIGGERED [${action.surfaceId}]: "${action.actionId}" @ ${action.controlId}`
-		)
+		let triggerDetails = action.surfaceId?.includes('trigger')
+			? `@ Trigger:'${action.surfaceId}'`
+			: `@ Surface:'${action.surfaceId}', ${await buttonLocationLogString(action, context)}`
+
+		this.moduleCallbacks.log('info', `[ACTION TRIGGERED] '${action.actionId}' ${triggerDetails}`)
+
 		try {
 			await this.#definition.callback({
 				action: action,
@@ -224,7 +244,7 @@ class SoundwebActionDefinitionProvider<
 		} catch (error) {
 			this.moduleCallbacks.log(
 				'error',
-				`There was an error triggering the action "${action.actionId}".  Error message: ${error}`
+				`There was an error triggering the action '${action.actionId}' @ ${triggerDetails}.  Error message: ${error}`
 			)
 		}
 	}

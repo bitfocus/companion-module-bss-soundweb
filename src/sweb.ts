@@ -1,7 +1,7 @@
 // Some of the functions within this module are subject to Copyright (c) 2022 Alexandre Matheson
 // The aforementioned functions are derived from: https://github.com/dudest/node-red-contrib-soundweb
 
-import { z } from 'zod'
+import { ZodError, z } from 'zod'
 import { FQ_PARAM_ADDR_REGEXP } from './utils'
 
 export enum MessageType {
@@ -174,7 +174,7 @@ export class ParameterAddress {
 		}
 		try {
 			// Check formatting
-			addrStr = z.string().regex(new RegExp(FQ_PARAM_ADDR_REGEXP)).parse(addrStr)
+			addrStr = z.string().regex(new RegExp(FQ_PARAM_ADDR_REGEXP), 'Invalid format').parse(addrStr)
 
 			// Split into parts
 			let parts = addrStr.split('.')
@@ -216,13 +216,13 @@ export class ParameterAddress {
 					})
 				}
 				default:
-					throw new ParameterAddressParsingError(
-						`Parameter address string: ${addrStr} does not take the correct form. <NODE>.<VD>.<OBJECT>.<PARAM> OR <NODE>,<VD>.<OBJECT_1>.<OBJECT_2>.<OBJECT_3>.<PARAM>`
-					)
+					throw new Error(`Invalid format`)
 			}
 		} catch (err) {
-			if (err instanceof Error) {
-				throw new ParameterAddressParsingError(`Error parsing address: ${addrStr}: ${err.message}`)
+			if (err instanceof ZodError) {
+				throw new ParameterAddressParsingError(`Error parsing address: '${addrStr}': ${err.errors[0].message}`)
+			} else if (err instanceof Error) {
+				throw new ParameterAddressParsingError(`Error parsing address: '${addrStr}': ${err.message}`)
 			} else {
 				throw new ParameterAddressParsingError(`Unknown error parsing address: ${addrStr}`)
 			}

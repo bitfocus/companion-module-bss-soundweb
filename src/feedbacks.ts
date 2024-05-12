@@ -9,6 +9,7 @@ import {
 	LogLevel,
 	SomeCompanionFeedbackInputField,
 } from '@companion-module/base'
+import { buttonLocationLogString } from './logging'
 import { OptionsParsingResult, ParsedOptionValues, ParsingError } from './options'
 import { ParameterUnit } from './parameters'
 import { ParameterAddress } from './sweb'
@@ -198,7 +199,13 @@ class SoundwebFeedbackDefinitionProvider<
 		if (this.#definition.subscribe == undefined) return
 		let parseResult = await this.#parseOptions(feedback, context)
 		if (parseResult.success == false) return this.moduleCallbacks.log('error', parseResult.error)
-		this.moduleCallbacks.log('debug', `FEEDBACK SUBSCRIBED: "${feedback.feedbackId}" @ ${feedback.controlId}`)
+
+		let location = await buttonLocationLogString(feedback, context)
+		this.moduleCallbacks.log(
+			'debug',
+			`[FEEDBACK SUBSCRIBING] '${feedback.feedbackId}' @ ${(location = '' ? feedback.controlId : location)}`
+		)
+
 		await this.#definition.subscribe({
 			feedback: feedback,
 			context: context,
@@ -210,7 +217,13 @@ class SoundwebFeedbackDefinitionProvider<
 		if (this.#definition.unsubscribe == undefined) return
 		let parseResult = await this.#parseOptions(feedback, context)
 		if (parseResult.success == false) return this.moduleCallbacks.log('error', parseResult.error)
-		this.moduleCallbacks.log('debug', `FEEDBACK UNSUBSCRIBED: "${feedback.feedbackId}" @ ${feedback.controlId}`)
+
+		let location = await buttonLocationLogString(feedback, context)
+		this.moduleCallbacks.log(
+			'debug',
+			`[FEEDBACK UNSUBSCRIBING] '${feedback.feedbackId}' @ ${(location = '' ? feedback.controlId : location)}`
+		)
+
 		await this.#definition.unsubscribe({
 			feedback: feedback,
 			context: context,
@@ -230,8 +243,11 @@ class SoundwebFeedbackDefinitionProvider<
 			return false
 		}
 
-		// If options are successfully parsed...
-		this.moduleCallbacks.log('debug', `FEEDBACK TRIGGERED: "${feedback.feedbackId}" @ ${feedback.controlId}`)
+		let location = await buttonLocationLogString(feedback, context)
+		this.moduleCallbacks.log(
+			'debug',
+			`[FEEDBACK TRIGGERED] '${feedback.feedbackId}' @ ${(location = '' ? feedback.controlId : location)}`
+		)
 
 		let result
 		try {
@@ -243,7 +259,9 @@ class SoundwebFeedbackDefinitionProvider<
 		} catch (error) {
 			this.moduleCallbacks.log(
 				'error',
-				`There was an error calling the feedback "${feedback.feedbackId}".  Error message: ${error}`
+				`There was an error calling the feedback '${feedback.feedbackId}' @ ${(location = ''
+					? feedback.controlId
+					: location)}.  Error message: ${error}`
 			)
 		}
 

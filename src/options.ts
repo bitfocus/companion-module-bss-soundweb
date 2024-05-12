@@ -270,7 +270,7 @@ export class ParsingError extends Error {
 function getErrorMessage(err: unknown): string {
 	let errMsg
 	if (err instanceof ZodError) {
-		errMsg = err.message
+		errMsg = err.issues[0].message // Return message from Zod issue for now.
 	} else if (typeof err == 'string') {
 		errMsg = err
 	} else {
