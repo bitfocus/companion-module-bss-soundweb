@@ -10,7 +10,16 @@ This module enables Companion to control BSS Soundweb London BLU devices such as
 This module is only compatible with Companion v3 and will be available in Companion from `v3.3.0`.
 
 ## Releases
+
+### v1.0.1
+
+Fixes and minor improvements.
+
+- Fixes bug that stopped the module communicating due to nodes not being removed correctly from the connection watchdog.
+- Minor improvements to logging to help direct users to the button where there is an issue with the configuration of an action or feedback.
+
 ### v1.0.0
+
 This is the first release of the module and is compatible with Companion `v3.3.0` and later.
 
 ## Feature Roadmap
@@ -38,13 +47,13 @@ This is the first release of the module and is compatible with Companion `v3.3.0
   - [ ] Gain Level Down
   - [ ] Gain Fade
 
-## Pre-release checklist
-
-- [x] Write a basic HELP.md
-- [x] Run Companion tools bundler
-- [x] Set initial version
-
 # Development
+
+## TODO
+
+- Improve options parsing/validation and error reporting with Zod object schemas
+- Abstract away comms/control methods from module instance class
+- General cleanup
 
 ## Setup Node.js with fnm
 
@@ -147,7 +156,9 @@ Companion imports/runs the file identified in [mainfest.json](companion/manifest
 Once you have built the project, you can run `yarn dev` as detailed above, which will then watch your source code and auto-transpile typescript to javascript as you work. In turn, Companion will then live reload any edited development modules automatically.
 
 ## Version bumping
+
 ### Releases
+
 `yarn version --major`
 
 `yarn version --minor`
@@ -155,6 +166,7 @@ Once you have built the project, you can run `yarn dev` as detailed above, which
 `yarn version --patch`
 
 ### Pre-releases
+
 `yarn version --premajor --preid rc`
 
 `yarn version --preminor --preid rc`
@@ -162,6 +174,7 @@ Once you have built the project, you can run `yarn dev` as detailed above, which
 `yarn version --prepatch --preid rc`
 
 ### Betas
+
 `yarn version --premajor --preid beta`
 
 `yarn version --preminor --preid beta`
