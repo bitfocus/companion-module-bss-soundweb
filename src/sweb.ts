@@ -266,6 +266,9 @@ export function rawToDb(rawValue: number): number {
  * Returns a raw value of a percentage (0-100) of a 4 byte range
  */
 export function percentToRaw(percent: number): number {
+	// Clamp 0-100%
+	percent = percent > 100 ? 100 : percent
+	percent = percent < 0 ? 0 : percent
 	return (Math.round(percent * 100) / 100) * 65536
 }
 

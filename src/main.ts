@@ -60,7 +60,8 @@ function buildSwebMsgLogEntry(
 function convertUnitToRaw(value: number | '-inf', unit: ParameterUnit) {
 	switch (unit) {
 		case ParameterUnit.DB:
-			return sweb.dbToRaw(value)
+			let raw = sweb.dbToRaw(value)
+			return raw
 		case ParameterUnit.PERCENT:
 			if (typeof value != 'number') throw Error('Percent value has to be of type number')
 			return sweb.percentToRaw(value)
@@ -481,9 +482,13 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 
 				// We must convert the stored 'currentValue' to its scaled unit first to account for ranged scaling laws
 				currentValue = convertRawToUnit(currentValue, unit)
-				value = convertUnitToRaw((value += currentValue), unit)
 
-				this.logTX(sweb.MessageType.BUMP_PERCENT, paramAddress, value)
+				let newValue = value += currentValue
+
+				// Get the raw value to send to the device
+				value = convertUnitToRaw((newValue), unit)
+
+				this.logTX(sweb.MessageType.SET_PERCENT, paramAddress, value)
 				this.deviceSendBuffer(sweb.buildSetParameterBuf(paramAddress, value, sweb.MessageType.SET_PERCENT))
 
 				break
@@ -498,7 +503,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 
 				// We must convert the stored 'currentValue' to its scaled unit first to account for ranged scaling laws
 				currentValue = convertRawToUnit(currentValue, unit)
-				value = convertUnitToRaw((value += currentValue), unit)
+				value = convertUnitToRaw((currentValue += value), unit)
 
 				this.logTX(sweb.MessageType.SET, paramAddress, value)
 				this.deviceSendBuffer(sweb.buildSetParameterBuf(paramAddress, value, sweb.MessageType.SET))
