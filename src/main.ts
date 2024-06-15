@@ -44,7 +44,9 @@ function buildSwebMsgLogEntry(
 	message: { msg_type: number; address: sweb.ParameterAddress; data?: number | string }
 ) {
 	// Log the parsed command
-	let logMsg = `[${topic.toUpperCase()}] Msg Type: ${sweb.MessageType[message.msg_type]}, Parameter: ${message.address.toString()}`
+	let logMsg = `[${topic.toUpperCase()}] Msg Type: ${
+		sweb.MessageType[message.msg_type]
+	}, Parameter: ${message.address.toString()}`
 	if (!(message.data == undefined)) {
 		logMsg = `${logMsg}, Data: ${message.data}`
 	}
@@ -429,6 +431,21 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 	}
 
 	/**
+	 * Prepare and send a set parameter message
+	 */
+	deviceSendSetParameter(
+		paramAddress: sweb.ParameterAddress,
+		messageType: sweb.MessageType.SET | sweb.MessageType.SET_PERCENT,
+		value: number,
+		log = true
+	): void {
+		if (![sweb.MessageType.SET, sweb.MessageType.SET_PERCENT].includes(messageType))
+			throw new Error('Incorrect message type')
+		if (log) this.logTX(messageType, paramAddress, value)
+		this.deviceSendBuffer(sweb.buildSetParameterBuf(paramAddress, value, messageType))
+	}
+
+	/**
 	 * Send a subscribe message
 	 */
 	async deviceSubscribeParameter(paramAddress: sweb.ParameterAddress, subscriptionType: ParameterSubscriptionType) {
@@ -483,14 +500,13 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 				// We must convert the stored 'currentValue' to its scaled unit first to account for ranged scaling laws
 				currentValue = convertRawToUnit(currentValue, unit)
 
-				let newValue = value += currentValue
+				let newValue = (value += currentValue)
 
 				// Get the raw value to send to the device
-				value = convertUnitToRaw((newValue), unit)
+				value = convertUnitToRaw(newValue, unit)
 
-				this.logTX(sweb.MessageType.SET_PERCENT, paramAddress, value)
-				this.deviceSendBuffer(sweb.buildSetParameterBuf(paramAddress, value, sweb.MessageType.SET_PERCENT))
-
+				// Send to device
+				this.deviceSendSetParameter(paramAddress, sweb.MessageType.SET_PERCENT, value)
 				break
 			}
 			default: {
@@ -505,8 +521,8 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 				currentValue = convertRawToUnit(currentValue, unit)
 				value = convertUnitToRaw((currentValue += value), unit)
 
-				this.logTX(sweb.MessageType.SET, paramAddress, value)
-				this.deviceSendBuffer(sweb.buildSetParameterBuf(paramAddress, value, sweb.MessageType.SET))
+				// Send to device
+				this.deviceSendSetParameter(paramAddress, sweb.MessageType.SET, value)
 				break
 			}
 		}
@@ -522,12 +538,12 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 
 		switch (unit) {
 			case ParameterUnit.PERCENT:
-				this.logTX(sweb.MessageType.SET_PERCENT, paramAddress, value)
-				this.deviceSendBuffer(sweb.buildSetParameterBuf(paramAddress, value, sweb.MessageType.SET_PERCENT))
+				// Send to device
+				this.deviceSendSetParameter(paramAddress, sweb.MessageType.SET_PERCENT, value)
 				break
 			default:
-				this.logTX(sweb.MessageType.SET, paramAddress, value)
-				this.deviceSendBuffer(sweb.buildSetParameterBuf(paramAddress, value, sweb.MessageType.SET))
+				// Send to device
+				this.deviceSendSetParameter(paramAddress, sweb.MessageType.SET, value)
 		}
 	}
 
@@ -648,7 +664,7 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 			this.variableManager?.getVariableDefinitionFromId(varDefId) ??
 			createParameterVariableDefinition(paramAddress, unit, variableTag)
 
-		// If it's a new variable definition, we need to add it to the 
+		// If it's a new variable definition, we need to add it to the
 		if (isNewVarDef) this.variableManager?.addVariableDefinition(varDef)
 
 		// Register the supplied depdendent on the variable definition
@@ -721,7 +737,13 @@ export class SoundwebModuleInstance extends InstanceBase<SoundwebConfig> {
 
 		// If we have been asked to create a variable, do it and make all the necessary connections
 		if (createVariable) {
-			this.#createVariableDefinitionAndRegisterDependent(paramAddress, unit, DependentType.FEEDBACK, feedback.id, variableTag)
+			this.#createVariableDefinitionAndRegisterDependent(
+				paramAddress,
+				unit,
+				DependentType.FEEDBACK,
+				feedback.id,
+				variableTag
+			)
 		}
 		this.connectionWatchdog?.addNodeDependency(paramAddress.node, feedback.id)
 	}
