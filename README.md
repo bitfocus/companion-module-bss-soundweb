@@ -11,6 +11,13 @@ This module is only compatible with Companion v3 and will be available in Compan
 
 ## Releases
 
+### v1.0.2
+
+Fixes and minor improvements.
+
+- Fixes bug where large relative percent increments could result in looping back round to 0%
+- Minor refactoring for logging module TX messages when setting parameters to avoid code duplication and error
+
 ### v1.0.1
 
 Fixes and minor improvements.
