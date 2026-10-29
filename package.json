@@ -16,7 +16,7 @@
 	"dependencies": {
 		"@companion-module/base": "~1.8.0",
 		"to-regex-range": "^5.0.1",
-		"zod": "^3.22.4"
+		"zod": "^4.6.6"
 	},
 	"devDependencies": {
 		"@companion-module/tools": "^2.8.0",
